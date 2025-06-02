@@ -2,23 +2,33 @@
 Grid Management Functions
 
 This module contains functions for managing the visualization grid layout,
-including adding, removing, and organizing containers.
+including adding, removing, and organizing containers in a flexible 6x6 grid.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Tuple
 import uuid
 
 # Global grid state (in production, this would be managed by a proper state manager)
 _grid_containers = {}
-_grid_layout = {"max_containers": 6, "current_count": 0}
+_grid_layout = {
+    "grid_size": 6,  # 6x6 grid
+    "containers": {}
+}
 
-def add_container(position: int = None, size_ratio: float = 1.0) -> Dict[str, Any]:
+def add_container(position: str = None, 
+                 start_row: int = None, start_col: int = None,
+                 end_row: int = None, end_col: int = None,
+                 title: str = None) -> Dict[str, Any]:
     """
     Add a new visualization container to the grid
     
     Args:
-        position: Position in the grid (1-6, None for next available)
-        size_ratio: Relative size of the container (0.5-2.0)
+        position: Natural language position (e.g., "bottom right", "top left")
+        start_row: Starting row (0-5)
+        start_col: Starting column (0-5)
+        end_row: Ending row (0-5)
+        end_col: Ending column (0-5)
+        title: Container title
         
     Returns:
         Dictionary with container information
@@ -26,44 +36,36 @@ def add_container(position: int = None, size_ratio: float = 1.0) -> Dict[str, An
     global _grid_containers, _grid_layout
     
     try:
-        # Check if we've reached the maximum number of containers
-        if _grid_layout["current_count"] >= _grid_layout["max_containers"]:
+        # Parse position if provided
+        if position and not all([start_row is not None, start_col is not None]):
+            coords = _parse_position_description(position)
+            start_row = coords["start_row"]
+            start_col = coords["start_col"]
+            end_row = coords["end_row"]
+            end_col = coords["end_col"]
+        
+        # Default to single cell if end coordinates not provided
+        if end_row is None:
+            end_row = start_row if start_row is not None else 0
+        if end_col is None:
+            end_col = start_col if start_col is not None else 0
+        if start_row is None:
+            start_row = 0
+        if start_col is None:
+            start_col = 0
+            
+        # Validate coordinates
+        if not _validate_coordinates(start_row, start_col, end_row, end_col):
             return {
                 "status": "error",
-                "error": f"Maximum number of containers ({_grid_layout['max_containers']}) reached",
-                "current_containers": list(_grid_containers.keys())
+                "error": f"Invalid coordinates: must be within 0-5 range"
             }
         
-        # Determine position
-        if position is None:
-            # Find next available position
-            used_positions = [container["position"] for container in _grid_containers.values()]
-            for i in range(1, _grid_layout["max_containers"] + 1):
-                if i not in used_positions:
-                    position = i
-                    break
-        else:
-            # Validate position
-            if position < 1 or position > _grid_layout["max_containers"]:
-                return {
-                    "status": "error",
-                    "error": f"Position must be between 1 and {_grid_layout['max_containers']}"
-                }
-            
-            # Check if position is already occupied
-            for container in _grid_containers.values():
-                if container["position"] == position:
-                    return {
-                        "status": "error",
-                        "error": f"Position {position} is already occupied",
-                        "occupied_positions": [c["position"] for c in _grid_containers.values()]
-                    }
-        
-        # Validate size ratio
-        if size_ratio < 0.5 or size_ratio > 2.0:
+        # Check if cells are available
+        if not _are_cells_available(start_row, start_col, end_row, end_col):
             return {
                 "status": "error",
-                "error": "Size ratio must be between 0.5 and 2.0"
+                "error": f"Selected cells are already occupied"
             }
         
         # Generate unique container ID
@@ -72,32 +74,40 @@ def add_container(position: int = None, size_ratio: float = 1.0) -> Dict[str, An
         # Create container
         container = {
             "id": container_id,
-            "position": position,
-            "size_ratio": size_ratio,
+            "title": title or f"Container {len(_grid_containers) + 1}",
+            "start_row": start_row,
+            "start_col": start_col,
+            "end_row": end_row,
+            "end_col": end_col,
             "content": None,
             "content_type": None,
-            "created_at": "2024-01-01T00:00:00Z",  # In production, use actual timestamp
-            "title": f"Container {position}"
+            "created_at": "2024-01-01T00:00:00Z"  # In production, use actual timestamp
         }
         
         _grid_containers[container_id] = container
-        _grid_layout["current_count"] += 1
+        _grid_layout["containers"][container_id] = {
+            "start_row": start_row,
+            "start_col": start_col,
+            "end_row": end_row,
+            "end_col": end_col
+        }
         
         return {
             "status": "success",
             "result": {
                 "container_id": container_id,
-                "position": position,
-                "size_ratio": size_ratio,
-                "grid_status": {
-                    "total_containers": _grid_layout["current_count"],
-                    "max_containers": _grid_layout["max_containers"],
-                    "available_positions": _get_available_positions()
-                }
+                "title": container["title"],
+                "position": {
+                    "start_row": start_row,
+                    "start_col": start_col,
+                    "end_row": end_row,
+                    "end_col": end_col
+                },
+                "grid_status": _get_grid_status_summary()
             },
             "metadata": {
                 "action": "container_added",
-                "grid_layout": _get_grid_layout()
+                "cells_occupied": (end_row - start_row + 1) * (end_col - start_col + 1)
             }
         }
         
@@ -133,22 +143,22 @@ def remove_container(container_id: str) -> Dict[str, Any]:
         
         # Remove container
         del _grid_containers[container_id]
-        _grid_layout["current_count"] -= 1
+        del _grid_layout["containers"][container_id]
         
         return {
             "status": "success",
             "result": {
                 "removed_container_id": container_id,
-                "removed_position": removed_container["position"],
-                "grid_status": {
-                    "total_containers": _grid_layout["current_count"],
-                    "max_containers": _grid_layout["max_containers"],
-                    "available_positions": _get_available_positions()
-                }
+                "removed_position": {
+                    "start_row": removed_container["start_row"],
+                    "start_col": removed_container["start_col"],
+                    "end_row": removed_container["end_row"],
+                    "end_col": removed_container["end_col"]
+                },
+                "grid_status": _get_grid_status_summary()
             },
             "metadata": {
-                "action": "container_removed",
-                "grid_layout": _get_grid_layout()
+                "action": "container_removed"
             }
         }
         
@@ -174,22 +184,17 @@ def clear_grid() -> Dict[str, Any]:
         
         # Clear all containers
         _grid_containers.clear()
-        _grid_layout["current_count"] = 0
+        _grid_layout["containers"].clear()
         
         return {
             "status": "success",
             "result": {
                 "containers_removed": containers_removed,
                 "removed_container_ids": removed_container_ids,
-                "grid_status": {
-                    "total_containers": 0,
-                    "max_containers": _grid_layout["max_containers"],
-                    "available_positions": list(range(1, _grid_layout["max_containers"] + 1))
-                }
+                "grid_status": _get_grid_status_summary()
             },
             "metadata": {
-                "action": "grid_cleared",
-                "grid_layout": _get_grid_layout()
+                "action": "grid_cleared"
             }
         }
         
@@ -200,49 +205,189 @@ def clear_grid() -> Dict[str, Any]:
             "function_name": "clear_grid"
         }
 
-def resize_container(container_id: str, size_ratio: float) -> Dict[str, Any]:
+def move_container(container_id: str, 
+                  position: str = None,
+                  start_row: int = None, start_col: int = None,
+                  end_row: int = None, end_col: int = None) -> Dict[str, Any]:
     """
-    Resize a container in the grid
+    Move a container to a new position
     
     Args:
-        container_id: ID of the container to resize
-        size_ratio: New size ratio (0.5-2.0)
+        container_id: ID of the container to move
+        position: Natural language position
+        start_row, start_col, end_row, end_col: New coordinates
         
     Returns:
-        Dictionary with resize status
+        Dictionary with move status
     """
-    global _grid_containers
+    global _grid_containers, _grid_layout
     
     try:
         if container_id not in _grid_containers:
             return {
                 "status": "error",
-                "error": f"Container '{container_id}' not found",
-                "available_containers": list(_grid_containers.keys())
+                "error": f"Container '{container_id}' not found"
             }
         
-        # Validate size ratio
-        if size_ratio < 0.5 or size_ratio > 2.0:
+        container = _grid_containers[container_id]
+        
+        # Parse position if provided
+        if position and not all([start_row is not None, start_col is not None]):
+            coords = _parse_position_description(position)
+            start_row = coords["start_row"]
+            start_col = coords["start_col"]
+            end_row = coords["end_row"]
+            end_col = coords["end_col"]
+        
+        # Use current size if not specified
+        if end_row is None:
+            end_row = start_row + (container["end_row"] - container["start_row"])
+        if end_col is None:
+            end_col = start_col + (container["end_col"] - container["start_col"])
+            
+        # Validate new position
+        if not _validate_coordinates(start_row, start_col, end_row, end_col):
             return {
                 "status": "error",
-                "error": "Size ratio must be between 0.5 and 2.0"
+                "error": "Invalid coordinates"
             }
         
-        # Update container size
-        old_size = _grid_containers[container_id]["size_ratio"]
-        _grid_containers[container_id]["size_ratio"] = size_ratio
+        # Check if new position is available (excluding current container)
+        if not _are_cells_available(start_row, start_col, end_row, end_col, exclude_container=container_id):
+            return {
+                "status": "error",
+                "error": "Target position is occupied"
+            }
+        
+        # Update position
+        old_position = {
+            "start_row": container["start_row"],
+            "start_col": container["start_col"],
+            "end_row": container["end_row"],
+            "end_col": container["end_col"]
+        }
+        
+        container["start_row"] = start_row
+        container["start_col"] = start_col
+        container["end_row"] = end_row
+        container["end_col"] = end_col
+        
+        _grid_layout["containers"][container_id] = {
+            "start_row": start_row,
+            "start_col": start_col,
+            "end_row": end_row,
+            "end_col": end_col
+        }
         
         return {
             "status": "success",
             "result": {
                 "container_id": container_id,
-                "old_size_ratio": old_size,
-                "new_size_ratio": size_ratio,
-                "position": _grid_containers[container_id]["position"]
+                "old_position": old_position,
+                "new_position": {
+                    "start_row": start_row,
+                    "start_col": start_col,
+                    "end_row": end_row,
+                    "end_col": end_col
+                }
             },
             "metadata": {
-                "action": "container_resized",
-                "grid_layout": _get_grid_layout()
+                "action": "container_moved"
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": f"Error moving container: {str(e)}",
+            "function_name": "move_container"
+        }
+
+def resize_container(container_id: str,
+                    width: int = None, height: int = None,
+                    end_row: int = None, end_col: int = None) -> Dict[str, Any]:
+    """
+    Resize a container
+    
+    Args:
+        container_id: ID of the container to resize
+        width: New width in cells
+        height: New height in cells
+        end_row: New end row
+        end_col: New end column
+        
+    Returns:
+        Dictionary with resize status
+    """
+    global _grid_containers, _grid_layout
+    
+    try:
+        if container_id not in _grid_containers:
+            return {
+                "status": "error",
+                "error": f"Container '{container_id}' not found"
+            }
+        
+        container = _grid_containers[container_id]
+        
+        # Calculate new dimensions
+        if width is not None:
+            end_col = container["start_col"] + width - 1
+        elif end_col is None:
+            end_col = container["end_col"]
+            
+        if height is not None:
+            end_row = container["start_row"] + height - 1
+        elif end_row is None:
+            end_row = container["end_row"]
+        
+        # Validate new size
+        if not _validate_coordinates(container["start_row"], container["start_col"], end_row, end_col):
+            return {
+                "status": "error",
+                "error": "Invalid dimensions"
+            }
+        
+        # Check if new size is available
+        if not _are_cells_available(container["start_row"], container["start_col"], 
+                                   end_row, end_col, exclude_container=container_id):
+            return {
+                "status": "error",
+                "error": "Cannot resize: cells are occupied"
+            }
+        
+        # Update size
+        old_size = {
+            "width": container["end_col"] - container["start_col"] + 1,
+            "height": container["end_row"] - container["start_row"] + 1
+        }
+        
+        container["end_row"] = end_row
+        container["end_col"] = end_col
+        
+        _grid_layout["containers"][container_id]["end_row"] = end_row
+        _grid_layout["containers"][container_id]["end_col"] = end_col
+        
+        new_size = {
+            "width": end_col - container["start_col"] + 1,
+            "height": end_row - container["start_row"] + 1
+        }
+        
+        return {
+            "status": "success",
+            "result": {
+                "container_id": container_id,
+                "old_size": old_size,
+                "new_size": new_size,
+                "position": {
+                    "start_row": container["start_row"],
+                    "start_col": container["start_col"],
+                    "end_row": end_row,
+                    "end_col": end_col
+                }
+            },
+            "metadata": {
+                "action": "container_resized"
             }
         }
         
@@ -267,26 +412,35 @@ def get_grid_status() -> Dict[str, Any]:
         for container_id, container in _grid_containers.items():
             containers_info.append({
                 "id": container_id,
-                "position": container["position"],
-                "size_ratio": container["size_ratio"],
-                "content_type": container["content_type"],
-                "title": container["title"]
+                "title": container["title"],
+                "position": {
+                    "start_row": container["start_row"],
+                    "start_col": container["start_col"],
+                    "end_row": container["end_row"],
+                    "end_col": container["end_col"]
+                },
+                "size": {
+                    "width": container["end_col"] - container["start_col"] + 1,
+                    "height": container["end_row"] - container["start_row"] + 1
+                },
+                "content_type": container["content_type"]
             })
         
-        # Sort by position
-        containers_info.sort(key=lambda x: x["position"])
+        # Create grid visualization
+        grid_visual = _create_grid_visualization()
         
         return {
             "status": "success",
             "result": {
-                "grid_layout": _grid_layout,
+                "grid_size": _grid_layout["grid_size"],
                 "containers": containers_info,
-                "available_positions": _get_available_positions(),
-                "grid_utilization": f"{_grid_layout['current_count']}/{_grid_layout['max_containers']}"
+                "total_containers": len(_grid_containers),
+                "occupied_cells": _count_occupied_cells(),
+                "available_cells": 36 - _count_occupied_cells(),
+                "grid_visualization": grid_visual
             },
             "metadata": {
-                "total_containers": len(_grid_containers),
-                "grid_full": _grid_layout["current_count"] >= _grid_layout["max_containers"]
+                "grid_full": _count_occupied_cells() >= 36
             }
         }
         
@@ -334,7 +488,12 @@ def update_container_content(container_id: str, content: Dict[str, Any],
                 "container_id": container_id,
                 "content_type": content_type,
                 "title": _grid_containers[container_id]["title"],
-                "position": _grid_containers[container_id]["position"],
+                "position": {
+                    "start_row": _grid_containers[container_id]["start_row"],
+                    "start_col": _grid_containers[container_id]["start_col"],
+                    "end_row": _grid_containers[container_id]["end_row"],
+                    "end_col": _grid_containers[container_id]["end_col"]
+                },
                 "updated": True
             },
             "metadata": {
@@ -351,16 +510,107 @@ def update_container_content(container_id: str, content: Dict[str, Any],
         }
 
 # Helper functions
-def _get_available_positions() -> List[int]:
-    """Get list of available positions in the grid"""
-    used_positions = [container["position"] for container in _grid_containers.values()]
-    return [i for i in range(1, _grid_layout["max_containers"] + 1) if i not in used_positions]
+def _validate_coordinates(start_row: int, start_col: int, end_row: int, end_col: int) -> bool:
+    """Validate grid coordinates"""
+    return (0 <= start_row <= end_row < 6 and 
+            0 <= start_col <= end_col < 6)
 
-def _get_grid_layout() -> Dict[str, Any]:
-    """Get current grid layout information"""
+def _are_cells_available(start_row: int, start_col: int, end_row: int, end_col: int, 
+                        exclude_container: str = None) -> bool:
+    """Check if cells in the specified range are available"""
+    for container_id, coords in _grid_layout["containers"].items():
+        if exclude_container and container_id == exclude_container:
+            continue
+            
+        # Check for overlap
+        if not (end_row < coords["start_row"] or 
+                start_row > coords["end_row"] or
+                end_col < coords["start_col"] or
+                start_col > coords["end_col"]):
+            return False
+    
+    return True
+
+def _count_occupied_cells() -> int:
+    """Count total occupied cells"""
+    occupied = set()
+    for coords in _grid_layout["containers"].values():
+        for row in range(coords["start_row"], coords["end_row"] + 1):
+            for col in range(coords["start_col"], coords["end_col"] + 1):
+                occupied.add((row, col))
+    return len(occupied)
+
+def _get_grid_status_summary() -> Dict[str, Any]:
+    """Get summary of grid status"""
+    occupied = _count_occupied_cells()
     return {
-        "containers": {cid: {"position": c["position"], "size_ratio": c["size_ratio"]} 
-                      for cid, c in _grid_containers.items()},
-        "total_containers": _grid_layout["current_count"],
-        "max_containers": _grid_layout["max_containers"]
-    } 
+        "total_containers": len(_grid_containers),
+        "occupied_cells": occupied,
+        "available_cells": 36 - occupied,
+        "utilization": f"{(occupied / 36) * 100:.1f}%"
+    }
+
+def _create_grid_visualization() -> List[List[str]]:
+    """Create ASCII visualization of the grid"""
+    grid = [["." for _ in range(6)] for _ in range(6)]
+    
+    for container_id, coords in _grid_layout["containers"].items():
+        # Use first letter of container ID for visualization
+        marker = container_id[10] if len(container_id) > 10 else "X"
+        for row in range(coords["start_row"], coords["end_row"] + 1):
+            for col in range(coords["start_col"], coords["end_col"] + 1):
+                grid[row][col] = marker
+    
+    return grid
+
+def _parse_position_description(position: str) -> Dict[str, int]:
+    """Parse natural language position description"""
+    position = position.lower().strip()
+    
+    # Position mappings for common descriptions
+    positions = {
+        # Corners
+        "top left": {"start_row": 0, "start_col": 0, "end_row": 2, "end_col": 2},
+        "top right": {"start_row": 0, "start_col": 3, "end_row": 2, "end_col": 5},
+        "bottom left": {"start_row": 3, "start_col": 0, "end_row": 5, "end_col": 2},
+        "bottom right": {"start_row": 3, "start_col": 3, "end_row": 5, "end_col": 5},
+        
+        # Edges
+        "top": {"start_row": 0, "start_col": 0, "end_row": 2, "end_col": 5},
+        "bottom": {"start_row": 3, "start_col": 0, "end_row": 5, "end_col": 5},
+        "left": {"start_row": 0, "start_col": 0, "end_row": 5, "end_col": 2},
+        "right": {"start_row": 0, "start_col": 3, "end_row": 5, "end_col": 5},
+        
+        # Center positions
+        "center": {"start_row": 2, "start_col": 2, "end_row": 3, "end_col": 3},
+        "middle": {"start_row": 2, "start_col": 2, "end_row": 3, "end_col": 3},
+        
+        # Full grid
+        "full": {"start_row": 0, "start_col": 0, "end_row": 5, "end_col": 5},
+        "entire": {"start_row": 0, "start_col": 0, "end_row": 5, "end_col": 5},
+        
+        # Specific sizes
+        "small": {"start_row": 0, "start_col": 0, "end_row": 1, "end_col": 1},
+        "medium": {"start_row": 0, "start_col": 0, "end_row": 2, "end_col": 2},
+        "large": {"start_row": 0, "start_col": 0, "end_row": 3, "end_col": 3}
+    }
+    
+    # Look for matches
+    for key, coords in positions.items():
+        if key in position:
+            # Check for size modifiers
+            if "small" in position and key not in ["small", "medium", "large"]:
+                # Make it smaller
+                width = coords["end_col"] - coords["start_col"] + 1
+                height = coords["end_row"] - coords["start_row"] + 1
+                coords["end_col"] = coords["start_col"] + max(0, width // 2 - 1)
+                coords["end_row"] = coords["start_row"] + max(0, height // 2 - 1)
+            elif "large" in position and key not in ["small", "medium", "large"]:
+                # Make it larger (but stay within bounds)
+                coords["end_col"] = min(5, coords["end_col"] + 1)
+                coords["end_row"] = min(5, coords["end_row"] + 1)
+                
+            return coords
+    
+    # Default to small container at top-left
+    return {"start_row": 0, "start_col": 0, "end_row": 1, "end_col": 1} 

@@ -30,6 +30,7 @@ from .grid_management_functions import (
     add_container,
     remove_container,
     clear_grid,
+    move_container,
     resize_container,
     get_grid_status,
     update_container_content
@@ -60,6 +61,7 @@ AVAILABLE_FUNCTIONS: Dict[str, Callable] = {
     "add_container": add_container,
     "remove_container": remove_container,
     "clear_grid": clear_grid,
+    "move_container": move_container,
     "resize_container": resize_container,
     "get_grid_status": get_grid_status,
     "update_container_content": update_container_content
@@ -346,22 +348,41 @@ FUNCTION_SCHEMAS = [
     # Grid Management Functions
     {
         "name": "add_container",
-        "description": "Add a new visualization container to the grid",
+        "description": "Add a new visualization container to the 6x6 grid",
         "parameters": {
             "type": "object",
             "properties": {
                 "position": {
-                    "type": "integer",
-                    "description": "Position in the grid (1-6, null for next available)",
-                    "minimum": 1,
-                    "maximum": 6
+                    "type": "string",
+                    "description": "Natural language position (e.g., 'bottom right', 'top left', 'center', 'small', 'medium', 'large')"
                 },
-                "size_ratio": {
-                    "type": "number",
-                    "description": "Relative size of the container",
-                    "default": 1.0,
-                    "minimum": 0.5,
-                    "maximum": 2.0
+                "start_row": {
+                    "type": "integer",
+                    "description": "Starting row (0-5)",
+                    "minimum": 0,
+                    "maximum": 5
+                },
+                "start_col": {
+                    "type": "integer",
+                    "description": "Starting column (0-5)",
+                    "minimum": 0,
+                    "maximum": 5
+                },
+                "end_row": {
+                    "type": "integer",
+                    "description": "Ending row (0-5)",
+                    "minimum": 0,
+                    "maximum": 5
+                },
+                "end_col": {
+                    "type": "integer",
+                    "description": "Ending column (0-5)",
+                    "minimum": 0,
+                    "maximum": 5
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Optional title for the container"
                 }
             },
             "required": []
@@ -391,6 +412,48 @@ FUNCTION_SCHEMAS = [
         }
     },
     {
+        "name": "move_container",
+        "description": "Move a container to a new position in the grid",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "container_id": {
+                    "type": "string",
+                    "description": "ID of the container to move"
+                },
+                "position": {
+                    "type": "string",
+                    "description": "Natural language position (e.g., 'bottom right', 'top left')"
+                },
+                "start_row": {
+                    "type": "integer",
+                    "description": "New starting row (0-5)",
+                    "minimum": 0,
+                    "maximum": 5
+                },
+                "start_col": {
+                    "type": "integer",
+                    "description": "New starting column (0-5)",
+                    "minimum": 0,
+                    "maximum": 5
+                },
+                "end_row": {
+                    "type": "integer",
+                    "description": "New ending row (0-5)",
+                    "minimum": 0,
+                    "maximum": 5
+                },
+                "end_col": {
+                    "type": "integer",
+                    "description": "New ending column (0-5)",
+                    "minimum": 0,
+                    "maximum": 5
+                }
+            },
+            "required": ["container_id"]
+        }
+    },
+    {
         "name": "resize_container",
         "description": "Resize a container in the grid",
         "parameters": {
@@ -400,14 +463,32 @@ FUNCTION_SCHEMAS = [
                     "type": "string",
                     "description": "ID of the container to resize"
                 },
-                "size_ratio": {
-                    "type": "number",
-                    "description": "New size ratio",
-                    "minimum": 0.5,
-                    "maximum": 2.0
+                "width": {
+                    "type": "integer",
+                    "description": "New width in cells",
+                    "minimum": 1,
+                    "maximum": 6
+                },
+                "height": {
+                    "type": "integer",
+                    "description": "New height in cells",
+                    "minimum": 1,
+                    "maximum": 6
+                },
+                "end_row": {
+                    "type": "integer",
+                    "description": "New end row (0-5)",
+                    "minimum": 0,
+                    "maximum": 5
+                },
+                "end_col": {
+                    "type": "integer",
+                    "description": "New end column (0-5)",
+                    "minimum": 0,
+                    "maximum": 5
                 }
             },
-            "required": ["container_id", "size_ratio"]
+            "required": ["container_id"]
         }
     },
     {
@@ -484,7 +565,7 @@ def get_functions_by_category() -> Dict[str, List[str]]:
         ],
         "grid_management": [
             "add_container", "remove_container", "clear_grid", 
-            "resize_container", "get_grid_status", "update_container_content"
+            "move_container", "resize_container", "get_grid_status", "update_container_content"
         ]
     }
 
