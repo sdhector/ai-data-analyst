@@ -11,6 +11,42 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any, List, Union
 
+def _serialize_dataframe_for_table(df: pd.DataFrame) -> List[Dict]:
+    """
+    Serialize a DataFrame for table display with JSON-compatible format
+    
+    Args:
+        df: DataFrame to serialize
+        
+    Returns:
+        List of dictionaries with JSON-serializable values
+    """
+    df_copy = df.copy()
+    
+    # Convert datetime columns to strings
+    for col in df_copy.columns:
+        if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
+            df_copy[col] = df_copy[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+        elif pd.api.types.is_timedelta64_dtype(df_copy[col]):
+            df_copy[col] = df_copy[col].astype(str)
+    
+    # Convert to records and ensure all values are JSON serializable
+    records = []
+    for _, row in df_copy.iterrows():
+        record = {}
+        for col, value in row.items():
+            if pd.isna(value):
+                record[col] = None
+            elif isinstance(value, (np.integer, np.floating)):
+                record[col] = float(value) if isinstance(value, np.floating) else int(value)
+            elif isinstance(value, np.bool_):
+                record[col] = bool(value)
+            else:
+                record[col] = str(value)
+        records.append(record)
+    
+    return records
+
 def create_line_chart(container_id: str, x_col: str, y_col: str, title: str = "", 
                      color_col: str = None) -> Dict[str, Any]:
     """
@@ -354,7 +390,7 @@ def create_data_table(container_id: str, columns: List[str] = None, max_rows: in
             "result": {
                 "chart_type": "data_table",
                 "container_id": container_id,
-                "table_data": table_data.to_dict('records'),
+                "table_data": _serialize_dataframe_for_table(table_data),
                 "columns": columns,
                 "total_rows": len(_current_dataset),
                 "displayed_rows": len(table_data),

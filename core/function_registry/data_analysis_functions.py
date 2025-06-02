@@ -9,10 +9,48 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any, List, Union
 import json
+from datetime import datetime
 
 # Global data storage (in production, this would be managed by a proper data manager)
 _current_dataset = None
 _dataset_metadata = {}
+
+def _serialize_dataframe_sample(df: pd.DataFrame, n_rows: int = 5) -> List[Dict]:
+    """
+    Serialize a DataFrame sample to JSON-compatible format
+    
+    Args:
+        df: DataFrame to serialize
+        n_rows: Number of rows to include
+        
+    Returns:
+        List of dictionaries with JSON-serializable values
+    """
+    sample_df = df.head(n_rows).copy()
+    
+    # Convert datetime columns to strings
+    for col in sample_df.columns:
+        if pd.api.types.is_datetime64_any_dtype(sample_df[col]):
+            sample_df[col] = sample_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+        elif pd.api.types.is_timedelta64_dtype(sample_df[col]):
+            sample_df[col] = sample_df[col].astype(str)
+    
+    # Convert to records and ensure all values are JSON serializable
+    records = []
+    for _, row in sample_df.iterrows():
+        record = {}
+        for col, value in row.items():
+            if pd.isna(value):
+                record[col] = None
+            elif isinstance(value, (np.integer, np.floating)):
+                record[col] = float(value) if isinstance(value, np.floating) else int(value)
+            elif isinstance(value, np.bool_):
+                record[col] = bool(value)
+            else:
+                record[col] = str(value)
+        records.append(record)
+    
+    return records
 
 def load_sample_data(dataset_name: str) -> Dict[str, Any]:
     """
@@ -88,7 +126,7 @@ def load_sample_data(dataset_name: str) -> Dict[str, Any]:
                 "description": dataset_info["description"],
                 "shape": _current_dataset.shape,
                 "columns": _current_dataset.columns.tolist(),
-                "sample_data": _current_dataset.head().to_dict('records'),
+                "sample_data": _serialize_dataframe_sample(_current_dataset, 5),
                 "data_types": {col: str(dtype) for col, dtype in _current_dataset.dtypes.items()}
             },
             "metadata": _dataset_metadata
@@ -200,7 +238,7 @@ def filter_data(column: str, operator: str, value: Union[str, int, float]) -> Di
                 "filter_applied": f"{column} {operator} {value}",
                 "rows_remaining": len(filtered_data),
                 "rows_filtered_out": len(_current_dataset) - len(filtered_data) if len(_current_dataset) > len(filtered_data) else 0,
-                "sample_data": filtered_data.head().to_dict('records') if len(filtered_data) > 0 else []
+                "sample_data": _serialize_dataframe_sample(filtered_data, 5) if len(filtered_data) > 0 else []
             },
             "metadata": {
                 "shape": filtered_data.shape,
@@ -268,7 +306,7 @@ def group_data(column: str, aggregation: str) -> Dict[str, Any]:
                 "grouped_by": column,
                 "aggregation": aggregation,
                 "groups_count": len(grouped_data),
-                "grouped_data": grouped_data.to_dict('records'),
+                "grouped_data": _serialize_dataframe_sample(grouped_data, len(grouped_data)),
                 "summary": f"Grouped by {column} with {aggregation} aggregation"
             },
             "metadata": {
@@ -320,7 +358,7 @@ def sort_data(column: str, ascending: bool = True) -> Dict[str, Any]:
                 "sorted_by": column,
                 "ascending": ascending,
                 "total_rows": len(_current_dataset),
-                "sample_data": _current_dataset.head().to_dict('records')
+                "sample_data": _serialize_dataframe_sample(_current_dataset, 5)
             },
             "metadata": {
                 "sort_column": column,
@@ -438,7 +476,7 @@ def get_data_sample(n_rows: int = 10) -> Dict[str, Any]:
             "result": {
                 "sample_size": len(sample_data),
                 "total_rows": len(_current_dataset),
-                "sample_data": sample_data.to_dict('records'),
+                "sample_data": _serialize_dataframe_sample(sample_data, len(sample_data)),
                 "columns": _current_dataset.columns.tolist()
             },
             "metadata": {
