@@ -116,7 +116,7 @@ def load_sample_data(dataset_name: str) -> Dict[str, Any]:
             "description": dataset_info["description"],
             "shape": _current_dataset.shape,
             "columns": _current_dataset.columns.tolist(),
-            "dtypes": _current_dataset.dtypes.to_dict()
+            "dtypes": {col: str(dtype) for col, dtype in _current_dataset.dtypes.items()}
         }
         
         return {

@@ -9,6 +9,39 @@ import json
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import uuid
+import numpy as np
+import pandas as pd
+
+def _safe_json_serialize(obj):
+    """
+    Safely serialize objects to JSON-compatible format
+    
+    Args:
+        obj: Object to serialize
+        
+    Returns:
+        JSON-serializable object
+    """
+    if isinstance(obj, dict):
+        return {k: _safe_json_serialize(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_safe_json_serialize(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(_safe_json_serialize(item) for item in obj)
+    elif isinstance(obj, (np.integer, np.floating)):
+        return float(obj) if isinstance(obj, np.floating) else int(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (pd.Timestamp, pd.DatetimeIndex)):
+        return str(obj)
+    elif hasattr(obj, 'dtype'):  # Handle pandas/numpy dtypes
+        return str(obj)
+    elif isinstance(obj, type):  # Handle type objects
+        return str(obj)
+    else:
+        return obj
 
 class ConversationManager:
     """
@@ -74,11 +107,11 @@ Be helpful, clear, and always explain your analysis steps."""
     def add_message(self, conversation_id: str, role: str, content: str, 
                    function_call: Dict = None, function_result: Dict = None) -> Dict[str, Any]:
         """
-        Add a message to the conversation
+        Add a message to a conversation
         
         Args:
             conversation_id: ID of the conversation
-            role: Message role ('user', 'assistant', 'system', 'function')
+            role: Message role (user, assistant, system)
             content: Message content
             function_call: Optional function call data
             function_result: Optional function result data
@@ -113,7 +146,7 @@ Be helpful, clear, and always explain your analysis steps."""
             
             # Add function result if provided
             if function_result:
-                message["function_result"] = function_result
+                message["function_result"] = _safe_json_serialize(function_result)
             
             # Add message to conversation
             conversation["messages"].append(message)
