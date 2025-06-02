@@ -47,6 +47,24 @@ def _serialize_dataframe_for_table(df: pd.DataFrame) -> List[Dict]:
     
     return records
 
+def _convert_numpy_to_list_recursive(item: Any) -> Any:
+    """
+    Recursively convert numpy arrays to lists within nested data structures.
+    
+    Args:
+        item: The item to process.
+        
+    Returns:
+        The processed item with numpy arrays converted to lists.
+    """
+    if isinstance(item, np.ndarray):
+        return item.tolist()
+    if isinstance(item, dict):
+        return {k: _convert_numpy_to_list_recursive(v) for k, v in item.items()}
+    if isinstance(item, list):
+        return [_convert_numpy_to_list_recursive(elem) for elem in item]
+    return item
+
 def create_line_chart(container_id: str, x_col: str, y_col: str, title: str = "", 
                      color_col: str = None) -> Dict[str, Any]:
     """
@@ -104,7 +122,7 @@ def create_line_chart(container_id: str, x_col: str, y_col: str, title: str = ""
             "result": {
                 "chart_type": "line_chart",
                 "container_id": container_id,
-                "chart_config": fig.to_dict(),
+                "chart_config": _convert_numpy_to_list_recursive(fig.to_dict()),
                 "data_points": len(_current_dataset),
                 "x_column": x_col,
                 "y_column": y_col,
@@ -180,7 +198,7 @@ def create_bar_chart(container_id: str, x_col: str, y_col: str, title: str = "",
             "result": {
                 "chart_type": "bar_chart",
                 "container_id": container_id,
-                "chart_config": fig.to_dict(),
+                "chart_config": _convert_numpy_to_list_recursive(fig.to_dict()),
                 "data_points": len(_current_dataset),
                 "x_column": x_col,
                 "y_column": y_col,
@@ -256,7 +274,7 @@ def create_scatter_plot(container_id: str, x_col: str, y_col: str, title: str = 
             "result": {
                 "chart_type": "scatter_plot",
                 "container_id": container_id,
-                "chart_config": fig.to_dict(),
+                "chart_config": _convert_numpy_to_list_recursive(fig.to_dict()),
                 "data_points": len(_current_dataset),
                 "x_column": x_col,
                 "y_column": y_col,
@@ -329,7 +347,7 @@ def create_histogram(container_id: str, column: str, bins: int = 20, title: str 
             "result": {
                 "chart_type": "histogram",
                 "container_id": container_id,
-                "chart_config": fig.to_dict(),
+                "chart_config": _convert_numpy_to_list_recursive(fig.to_dict()),
                 "data_points": len(_current_dataset),
                 "column": column,
                 "bins": bins,
