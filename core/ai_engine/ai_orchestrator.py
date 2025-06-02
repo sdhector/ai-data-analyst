@@ -192,7 +192,8 @@ class AIOrchestrator:
                     conversation_id=conversation_id,
                     role="function",
                     content=json.dumps(function_result),
-                    function_result=function_result
+                    function_result=function_result,
+                    function_name=function_name
                 )
                 
                 # Update messages for next iteration

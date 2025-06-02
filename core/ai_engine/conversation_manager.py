@@ -105,7 +105,7 @@ Be helpful, clear, and always explain your analysis steps."""
         return conversation_id
     
     def add_message(self, conversation_id: str, role: str, content: str, 
-                   function_call: Dict = None, function_result: Dict = None) -> Dict[str, Any]:
+                   function_call: Dict = None, function_result: Dict = None, function_name: str = None) -> Dict[str, Any]:
         """
         Add a message to a conversation
         
@@ -115,6 +115,7 @@ Be helpful, clear, and always explain your analysis steps."""
             content: Message content
             function_call: Optional function call data
             function_result: Optional function result data
+            function_name: Optional function name for function role messages
             
         Returns:
             Dictionary with operation status
@@ -147,6 +148,10 @@ Be helpful, clear, and always explain your analysis steps."""
             # Add function result if provided
             if function_result:
                 message["function_result"] = _safe_json_serialize(function_result)
+            
+            # Add function name if provided (required for function role messages)
+            if function_name:
+                message["function_name"] = function_name
             
             # Add message to conversation
             conversation["messages"].append(message)
@@ -206,6 +211,10 @@ Be helpful, clear, and always explain your analysis steps."""
             # Add function call if present
             if "function_call" in msg:
                 openai_msg["function_call"] = msg["function_call"]
+            
+            # Add function name if present (required for function role messages)
+            if "function_name" in msg:
+                openai_msg["name"] = msg["function_name"]
             
             messages.append(openai_msg)
         
