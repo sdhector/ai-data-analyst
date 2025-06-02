@@ -188,10 +188,12 @@ class AIOrchestrator:
                 )
                 
                 # Add function result message
+                from .conversation_manager import _safe_json_serialize
+                safe_function_result = _safe_json_serialize(function_result)
                 self.conversation_manager.add_message(
                     conversation_id=conversation_id,
                     role="function",
-                    content=json.dumps(function_result),
+                    content=json.dumps(safe_function_result),
                     function_result=function_result,
                     function_name=function_name
                 )

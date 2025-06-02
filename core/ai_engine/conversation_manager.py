@@ -22,26 +22,38 @@ def _safe_json_serialize(obj):
     Returns:
         JSON-serializable object
     """
-    if isinstance(obj, dict):
-        return {k: _safe_json_serialize(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [_safe_json_serialize(item) for item in obj]
-    elif isinstance(obj, tuple):
-        return tuple(_safe_json_serialize(item) for item in obj)
-    elif isinstance(obj, (np.integer, np.floating)):
-        return float(obj) if isinstance(obj, np.floating) else int(obj)
-    elif isinstance(obj, np.bool_):
-        return bool(obj)
-    elif isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, (pd.Timestamp, pd.DatetimeIndex)):
+    try:
+        if isinstance(obj, dict):
+            return {k: _safe_json_serialize(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [_safe_json_serialize(item) for item in obj]
+        elif isinstance(obj, (np.integer, np.int8, np.int16, np.int32, np.int64)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, np.float16, np.float32, np.float64)):
+            return float(obj)
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, np.ndarray):
+            # Convert numpy array to list recursively
+            return _safe_json_serialize(obj.tolist())
+        elif isinstance(obj, (pd.Timestamp, pd.DatetimeIndex)):
+            return str(obj)
+        elif hasattr(obj, 'dtype'):  # Handle pandas/numpy dtypes
+            return str(obj)
+        elif isinstance(obj, type):  # Handle type objects
+            return str(obj)
+        elif hasattr(obj, 'tolist'):  # Any object with tolist method
+            return _safe_json_serialize(obj.tolist())
+        elif hasattr(obj, '__dict__'):  # Custom objects
+            return str(obj)
+        else:
+            # Try to JSON serialize directly
+            import json
+            json.dumps(obj)  # Test if it's serializable
+            return obj
+    except (TypeError, ValueError, OverflowError):
+        # If all else fails, convert to string
         return str(obj)
-    elif hasattr(obj, 'dtype'):  # Handle pandas/numpy dtypes
-        return str(obj)
-    elif isinstance(obj, type):  # Handle type objects
-        return str(obj)
-    else:
-        return obj
 
 class ConversationManager:
     """
