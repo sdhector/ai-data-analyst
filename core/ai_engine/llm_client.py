@@ -37,7 +37,7 @@ class LLMClient:
         # Configuration
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
-        self.max_tokens = max_tokens or int(os.getenv("MAX_TOKENS", "1000"))
+        self.max_tokens = max_tokens or int(os.getenv("MAX_TOKENS", "1000").strip('"'))
         self.temperature = temperature
         
         # Validate API key
