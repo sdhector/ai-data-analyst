@@ -327,19 +327,16 @@ def render_container_content(container: Dict[str, Any]):
     else:
         st.warning("Container data not found")
     
-    # Container actions
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🗑️", key=f"remove_{container_id}", help="Remove container"):
-            if st.session_state.ai_orchestrator:
-                result = st.session_state.ai_orchestrator.execute_function_directly("remove_container", {"container_id": container_id})
-                if result["status"] == "success":
-                    st.success("Container removed!")
-                    st.rerun()
+    # Container actions (no nested columns to avoid Streamlit limitation)
+    st.markdown("---")
     
-    with col2:
-        if st.button("🔄", key=f"refresh_{container_id}", help="Refresh container"):
-            st.rerun()
+    # Use inline buttons without columns
+    if st.button("🗑️ Remove Container", key=f"remove_{container_id}", help="Remove this container", use_container_width=True):
+        if st.session_state.ai_orchestrator:
+            result = st.session_state.ai_orchestrator.execute_function_directly("remove_container", {"container_id": container_id})
+            if result["status"] == "success":
+                st.success("Container removed!")
+                st.rerun()
 
 def render_sidebar():
     """Render the sidebar with additional controls"""
