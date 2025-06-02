@@ -1,81 +1,86 @@
-#!/usr/bin/env python3
 """
-AI Data Analyst - Main Application Entry Point
+AI Data Analyst - Main Entry Point
+
+This is the main entry point for the AI Data Analyst application.
+It launches the web server that serves the modern web interface.
 """
 
-import streamlit as st
-import pandas as pd
-import numpy as np
+import os
+import sys
+import argparse
 from pathlib import Path
 
+# Add the project root to Python path
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
+
+from adapters.web_adapter.web_server import run_server
+
+
 def main():
-    """Main application function"""
-    st.set_page_config(
-        page_title="AI Data Analyst",
-        page_icon="📊",
-        layout="wide"
+    """Main function to start the AI Data Analyst application"""
+    parser = argparse.ArgumentParser(description="AI Data Analyst - Modern Web Application")
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        help="Host to run the server on (default: 127.0.0.1)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to run the server on (default: 8000)"
+    )
+    parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        help="Automatically open the browser"
     )
     
-    st.title("🤖 AI Data Analyst")
-    st.markdown("Welcome to your intelligent data analysis companion!")
+    args = parser.parse_args()
     
-    # Sidebar for file upload
-    st.sidebar.header("Data Upload")
-    uploaded_file = st.file_uploader(
-        "Choose a data file",
-        type=['csv', 'xlsx', 'json'],
-        help="Upload your data file to get started with analysis"
-    )
+    # Print startup information
+    print("\n" + "="*60)
+    print("🤖 AI Data Analyst - Modern Web Application")
+    print("="*60)
+    print(f"\n📍 Server will run at: http://{args.host}:{args.port}")
+    print("\n🔧 Features:")
+    print("  • Dynamic 6x6 grid system")
+    print("  • Natural language data analysis")
+    print("  • Real-time visualizations")
+    print("  • WebSocket communication")
+    print("\n⚡ Press Ctrl+C to stop the server")
+    print("="*60 + "\n")
     
-    if uploaded_file is not None:
-        # Load data based on file type
-        try:
-            if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file)
-            elif uploaded_file.name.endswith('.xlsx'):
-                df = pd.read_excel(uploaded_file)
-            elif uploaded_file.name.endswith('.json'):
-                df = pd.read_json(uploaded_file)
-            
-            st.success(f"Successfully loaded {uploaded_file.name}")
-            
-            # Display basic info
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Rows", len(df))
-            with col2:
-                st.metric("Columns", len(df.columns))
-            with col3:
-                st.metric("Memory Usage", f"{df.memory_usage(deep=True).sum() / 1024:.1f} KB")
-            
-            # Show data preview
-            st.subheader("Data Preview")
-            st.dataframe(df.head())
-            
-            # Basic statistics
-            if st.checkbox("Show Statistical Summary"):
-                st.subheader("Statistical Summary")
-                st.dataframe(df.describe())
-                
-        except Exception as e:
-            st.error(f"Error loading file: {str(e)}")
-    else:
-        st.info("👆 Please upload a data file to begin analysis")
+    # Open browser if requested
+    if args.open_browser:
+        import webbrowser
+        import threading
+        import time
         
-        # Show sample data for demo
-        st.subheader("Demo with Sample Data")
-        if st.button("Load Sample Dataset"):
-            # Create sample data
-            np.random.seed(42)
-            sample_data = pd.DataFrame({
-                'Date': pd.date_range('2023-01-01', periods=100),
-                'Sales': np.random.normal(1000, 200, 100),
-                'Region': np.random.choice(['North', 'South', 'East', 'West'], 100),
-                'Product': np.random.choice(['A', 'B', 'C'], 100)
-            })
-            
-            st.dataframe(sample_data.head())
-            st.line_chart(sample_data.set_index('Date')['Sales'])
+        def open_browser():
+            time.sleep(2)  # Wait for server to start
+            webbrowser.open(f"http://{args.host}:{args.port}")
+        
+        threading.Thread(target=open_browser).start()
+    
+    # Check for API key
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        print("⚠️  WARNING: OPENAI_API_KEY not found in environment variables!")
+        print("   Please set it in your .env file or environment variables.")
+        print("")
+    
+    # Run the server
+    try:
+        run_server(host=args.host, port=args.port)
+    except KeyboardInterrupt:
+        print("\n\n👋 Shutting down AI Data Analyst...")
+    except Exception as e:
+        print(f"\n❌ Error starting server: {e}")
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main() 
