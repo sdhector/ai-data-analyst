@@ -142,22 +142,15 @@ class GridManager {
         container.className = 'visualization-container';
         container.id = id;
         container.innerHTML = `
-            <div class="container-header">
-                <h3 class="container-title">${title}</h3>
-                <div class="container-actions">
-                    <button class="container-action" onclick="gridManager.moveContainer('${id}')" title="Move">
-                        <span>↔️</span>
-                    </button>
-                    <button class="container-action" onclick="gridManager.resizeContainer('${id}')" title="Resize">
-                        <span>📏</span>
-                    </button>
-                    <button class="container-action" onclick="gridManager.removeContainer('${id}')" title="Remove">
-                        <span>🗑️</span>
-                    </button>
-                </div>
-            </div>
             <div class="container-content" id="${id}_content">
-                <p style="color: #adb5bd;">No content yet</p>
+                <div class="placeholder-image">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="3" width="18" height="18" rx="2" stroke="#cbd5e1" stroke-width="1.5" fill="none"/>
+                        <circle cx="8.5" cy="8.5" r="1.5" fill="#cbd5e1"/>
+                        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <p class="placeholder-text">${title}</p>
+                </div>
             </div>
         `;
         return container;
