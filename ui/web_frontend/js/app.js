@@ -38,8 +38,8 @@ async function initializeApp() {
         // Initialize with a default layout
         setTimeout(() => {
             if (window.gridManager.containers.size === 0) {
-                // Start with a simple two-column layout
-                window.gridManager.applyGridTemplate('two-columns');
+                // Start with a simple analytics layout
+                window.gridManager.applySmartLayout('analytics');
             }
         }, 500);
 
@@ -95,12 +95,56 @@ function setupGlobalEventHandlers() {
  * Setup grid template functions
  */
 function setupGridTemplates() {
-    // Make template functions globally available
-    window.applyGridTemplate = (template) => {
-        window.gridManager.applyGridTemplate(template);
+    // Make smart layout functions globally available
+    window.applySmartLayout = (preset) => {
+        window.gridManager.applySmartLayout(preset);
     };
 
     window.closeGridConfig = () => {
+        window.gridManager.closeGridConfig();
+    };
+
+    // Test function for smart placement
+    window.testSmartPlacement = () => {
+        console.log('Testing Smart Placement Algorithm...');
+        
+        // Clear grid first
+        window.gridManager.clearGrid();
+        
+        // Add containers one by one to test the algorithm
+        setTimeout(() => {
+            console.log('Adding first container (line_chart)...');
+            window.gridManager.addContainer({ 
+                title: 'Sales Trends', 
+                contentType: 'line_chart' 
+            });
+        }, 500);
+        
+        setTimeout(() => {
+            console.log('Adding second container (kpi_card)...');
+            window.gridManager.addContainer({ 
+                title: 'Key Metrics', 
+                contentType: 'kpi_card' 
+            });
+        }, 1500);
+        
+        setTimeout(() => {
+            console.log('Adding third container (bar_chart)...');
+            window.gridManager.addContainer({ 
+                title: 'Category Analysis', 
+                contentType: 'bar_chart' 
+            });
+        }, 2500);
+        
+        setTimeout(() => {
+            console.log('Adding fourth container (data_table)...');
+            window.gridManager.addContainer({ 
+                title: 'Data Details', 
+                contentType: 'data_table' 
+            });
+        }, 3500);
+        
+        // Close the modal
         window.gridManager.closeGridConfig();
     };
 }

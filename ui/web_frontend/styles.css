@@ -680,6 +680,62 @@ body {
     background: var(--gray-100);
 }
 
+/* ===== Reorganization Notification ===== */
+.reorganization-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1002;
+    background: var(--white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    border-left: 4px solid var(--primary-color);
+    animation: slideInRight var(--transition-base);
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.notification-icon {
+    font-size: var(--font-size-lg);
+}
+
+.notification-text {
+    font-size: var(--font-size-sm);
+    color: var(--gray-700);
+    font-weight: 500;
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    font-size: var(--font-size-lg);
+    color: var(--gray-400);
+    cursor: pointer;
+    padding: 0;
+    margin-left: var(--spacing-sm);
+    transition: color var(--transition-fast);
+}
+
+.notification-close:hover {
+    color: var(--gray-600);
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
 /* ===== Responsive Design ===== */
 @media (max-width: 1200px) {
     .main-content {

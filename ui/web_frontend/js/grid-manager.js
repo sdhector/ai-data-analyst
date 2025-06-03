@@ -12,6 +12,7 @@ class GridManager {
         this.selectedCells = new Set(); // For custom grid design
         this.isDesigning = false;
         this.dragStart = null;
+        this.smartEngine = new SmartPlacementEngine(this.gridSize); // Smart placement engine
         this.init();
     }
 
@@ -78,11 +79,123 @@ class GridManager {
     }
 
     /**
-     * Add a container to the grid at specified position
+     * Add a container using smart placement algorithm
      * @param {Object} config - Container configuration
-     * @returns {string} Container ID
+     * @returns {string} Container ID or placement result
      */
     addContainer(config = {}) {
+        // If specific position is provided, use legacy method
+        if (config.startRow !== undefined && config.startCol !== undefined) {
+            return this.addContainerAtPosition(config);
+        }
+
+        // Use smart placement algorithm
+        return this.addSmartContainer(config);
+    }
+
+    /**
+     * Add container using smart placement with reorganization
+     */
+    addSmartContainer(config = {}) {
+        const {
+            title = 'Container',
+            id = `container_${Date.now()}`,
+            contentType = 'generic'
+        } = config;
+
+        // Get current containers in smart engine format
+        const currentContainers = Array.from(this.containers.values()).map(container => ({
+            id: container.id,
+            title: container.title,
+            startRow: container.startRow,
+            startCol: container.startCol,
+            endRow: container.endRow,
+            endCol: container.endCol,
+            width: container.endCol - container.startCol + 1,
+            height: container.endRow - container.startRow + 1,
+            contentType: container.contentType || 'generic'
+        }));
+
+        // Use smart placement engine
+        const placementResult = this.smartEngine.findOptimalPlacement(currentContainers, {
+            id,
+            title,
+            contentType
+        });
+
+        if (!placementResult.success) {
+            throw new Error(placementResult.error || 'Could not place container');
+        }
+
+        // Apply the new layout
+        this.applySmartLayout(placementResult);
+
+        // Log placement details
+        console.log('Smart Placement Result:', {
+            reorganizationNeeded: placementResult.reorganizationNeeded,
+            totalContainers: placementResult.newLayout.length,
+            details: placementResult.reorganizationDetails
+        });
+
+        return id;
+    }
+
+    /**
+     * Apply smart layout result to the grid
+     */
+    applySmartLayout(placementResult) {
+        // Clear current grid
+        this.clearGridSilently();
+
+        // Add all containers from the new layout
+        placementResult.newLayout.forEach(containerData => {
+            const container = this.createContainerElement(containerData.id, containerData.title);
+            
+            // Calculate grid area
+            const gridArea = `${containerData.startRow + 1} / ${containerData.startCol + 1} / ${containerData.endRow + 2} / ${containerData.endCol + 2}`;
+            container.style.gridArea = gridArea;
+
+            // Store container data
+            this.containers.set(containerData.id, {
+                id: containerData.id,
+                title: containerData.title,
+                startRow: containerData.startRow,
+                startCol: containerData.startCol,
+                endRow: containerData.endRow,
+                endCol: containerData.endCol,
+                element: container,
+                content: null,
+                contentType: containerData.contentType,
+                width: containerData.width,
+                height: containerData.height
+            });
+
+            // Mark cells as occupied
+            this.markCellsOccupied(
+                containerData.startRow, 
+                containerData.startCol, 
+                containerData.endRow, 
+                containerData.endCol, 
+                containerData.id
+            );
+
+            // Add to grid
+            this.gridContainer.appendChild(container);
+        });
+
+        // Update container count
+        this.updateContainerCount();
+
+        // Show reorganization notification if needed
+        if (placementResult.reorganizationNeeded) {
+            this.showReorganizationNotification(placementResult.reorganizationDetails);
+        }
+    }
+
+    /**
+     * Legacy method for adding container at specific position
+     */
+    addContainerAtPosition(config = {}) {
         const {
             startRow = 0,
             startCol = 0,
@@ -193,6 +306,20 @@ class GridManager {
      * Clear all containers from the grid
      */
     clearGrid() {
+        this.clearGridSilently();
+
+        // Notify backend
+        if (window.websocketClient && window.websocketClient.connected) {
+            window.websocketClient.send({
+                type: 'grid_cleared'
+            });
+        }
+    }
+
+    /**
+     * Clear grid without notifications (for internal use)
+     */
+    clearGridSilently() {
         // Remove all containers
         for (const [id, container] of this.containers) {
             container.element.remove();
@@ -209,95 +336,62 @@ class GridManager {
 
         // Update container count
         this.updateContainerCount();
-
-        // Notify backend
-        if (window.websocketClient && window.websocketClient.connected) {
-            window.websocketClient.send({
-                type: 'grid_cleared'
-            });
-        }
     }
 
     /**
-     * Apply a grid template
+     * Show reorganization notification
      */
-    applyGridTemplate(template) {
+    showReorganizationNotification(details) {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = 'reorganization-notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <span class="notification-icon">🔄</span>
+                <span class="notification-text">
+                    Grid reorganized for optimal layout! 
+                    ${details.wastedCells === 0 ? 'Perfect fit achieved.' : `${details.wastedCells} cells unused.`}
+                </span>
+                <button class="notification-close" onclick="this.parentElement.parentElement.remove()">×</button>
+            </div>
+        `;
+
+        // Add to page
+        document.body.appendChild(notification);
+
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 5000);
+    }
+
+    /**
+     * Apply smart layout presets
+     */
+    applySmartLayout(preset) {
         this.clearGrid();
 
-        switch (template) {
-            case 'single':
-                this.addContainer({
-                    startRow: 0, startCol: 0,
-                    endRow: 2, endCol: 2,
-                    title: 'Main Dashboard'
-                });
+        switch (preset) {
+            case 'dashboard':
+                this.addContainer({ title: 'Main Dashboard', contentType: 'generic' });
                 break;
 
-            case 'two-columns':
-                this.addContainer({
-                    startRow: 0, startCol: 0,
-                    endRow: 2, endCol: 0,
-                    title: 'Left Panel'
-                });
-                this.addContainer({
-                    startRow: 0, startCol: 1,
-                    endRow: 2, endCol: 2,
-                    title: 'Right Panel'
-                });
+            case 'analytics':
+                this.addContainer({ title: 'Key Metrics', contentType: 'kpi_card' });
+                this.addContainer({ title: 'Trend Analysis', contentType: 'line_chart' });
                 break;
 
-            case 'two-rows':
-                this.addContainer({
-                    startRow: 0, startCol: 0,
-                    endRow: 0, endCol: 2,
-                    title: 'Top Panel'
-                });
-                this.addContainer({
-                    startRow: 1, startCol: 0,
-                    endRow: 2, endCol: 2,
-                    title: 'Bottom Panel'
-                });
+            case 'comparison':
+                this.addContainer({ title: 'Dataset A', contentType: 'bar_chart' });
+                this.addContainer({ title: 'Dataset B', contentType: 'bar_chart' });
                 break;
 
-            case 'quadrants':
-                this.addContainer({
-                    startRow: 0, startCol: 0,
-                    endRow: 0, endCol: 0,
-                    title: 'Top Left'
-                });
-                this.addContainer({
-                    startRow: 0, startCol: 2,
-                    endRow: 0, endCol: 2,
-                    title: 'Top Right'
-                });
-                this.addContainer({
-                    startRow: 2, startCol: 0,
-                    endRow: 2, endCol: 0,
-                    title: 'Bottom Left'
-                });
-                this.addContainer({
-                    startRow: 2, startCol: 2,
-                    endRow: 2, endCol: 2,
-                    title: 'Bottom Right'
-                });
-                break;
-
-            case 'three-columns':
-                this.addContainer({
-                    startRow: 0, startCol: 0,
-                    endRow: 2, endCol: 0,
-                    title: 'Left Column'
-                });
-                this.addContainer({
-                    startRow: 0, startCol: 1,
-                    endRow: 2, endCol: 1,
-                    title: 'Center Column'
-                });
-                this.addContainer({
-                    startRow: 0, startCol: 2,
-                    endRow: 2, endCol: 2,
-                    title: 'Right Column'
-                });
+            case 'detailed':
+                this.addContainer({ title: 'Overview', contentType: 'kpi_card' });
+                this.addContainer({ title: 'Main Chart', contentType: 'line_chart' });
+                this.addContainer({ title: 'Data Table', contentType: 'data_table' });
                 break;
 
             case 'custom':
@@ -306,7 +400,7 @@ class GridManager {
         }
 
         // Close modal if not custom
-        if (template !== 'custom') {
+        if (preset !== 'custom') {
             this.closeGridConfig();
         }
     }

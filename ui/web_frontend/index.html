@@ -110,29 +110,29 @@
                         </div>
                         <div class="modal-body">
                             <div class="config-section">
-                                <h4>Grid Templates</h4>
+                                <h4>Smart Layout Presets</h4>
                                 <div class="template-grid">
-                                    <button class="template-btn" onclick="applyGridTemplate('single')">
+                                    <button class="template-btn" onclick="applySmartLayout('dashboard')">
                                         <div class="template-preview single"></div>
-                                        <span>Single</span>
+                                        <span>Dashboard</span>
                                     </button>
-                                    <button class="template-btn" onclick="applyGridTemplate('two-columns')">
+                                    <button class="template-btn" onclick="applySmartLayout('analytics')">
                                         <div class="template-preview two-columns"></div>
-                                        <span>Two Columns</span>
+                                        <span>Analytics</span>
                                     </button>
-                                    <button class="template-btn" onclick="applyGridTemplate('two-rows')">
+                                    <button class="template-btn" onclick="applySmartLayout('comparison')">
                                         <div class="template-preview two-rows"></div>
-                                        <span>Two Rows</span>
+                                        <span>Comparison</span>
                                     </button>
-                                    <button class="template-btn" onclick="applyGridTemplate('quadrants')">
+                                    <button class="template-btn" onclick="applySmartLayout('detailed')">
                                         <div class="template-preview quadrants"></div>
-                                        <span>Quadrants</span>
+                                        <span>Detailed</span>
                                     </button>
-                                    <button class="template-btn" onclick="applyGridTemplate('three-columns')">
+                                    <button class="template-btn" onclick="testSmartPlacement()">
                                         <div class="template-preview three-columns"></div>
-                                        <span>Three Columns</span>
+                                        <span>Test Smart</span>
                                     </button>
-                                    <button class="template-btn" onclick="applyGridTemplate('custom')">
+                                    <button class="template-btn" onclick="applySmartLayout('custom')">
                                         <div class="template-preview custom"></div>
                                         <span>Custom</span>
                                     </button>
@@ -167,6 +167,7 @@
     </div>
 
     <!-- JavaScript -->
+    <script src="js/smart-placement-engine.js"></script>
     <script src="js/grid-manager.js"></script>
     <script src="js/chart-manager.js"></script>
     <script src="js/chat-interface.js"></script>
