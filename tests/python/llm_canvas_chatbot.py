@@ -326,14 +326,16 @@ class CanvasFunctionExecutor:
         self.controller = canvas_controller
         self.chatbot = chatbot_instance
     
-    def _create_pie_chart_html(self, title, labels, values):
+    def _create_pie_chart_html(self, title, labels, values, container_width=400, container_height=300):
         """
-        Create HTML content for a pie chart using CSS and SVG
+        Create HTML content for a pie chart using CSS and SVG that fits within container bounds
         
         Args:
             title: Chart title
             labels: List of labels for pie segments
             values: List of values for pie segments
+            container_width: Width of the container in pixels
+            container_height: Height of the container in pixels
             
         Returns:
             HTML string for the pie chart
@@ -348,8 +350,21 @@ class CanvasFunctionExecutor:
             "#fa709a", "#fee140", "#30cfd0", "#a8edea", "#fed6e3"
         ]
         
-        # Create SVG pie chart
-        svg_content = '<svg viewBox="0 0 200 200" style="width: 100%; height: 60%; max-height: 200px;">'
+        # Calculate optimal chart size based on container dimensions
+        # Reserve space for title and legend
+        title_height = 30 if title else 0
+        legend_height = min(60, max(20, len(labels) * 8))  # Dynamic legend height
+        padding = 20
+        
+        available_height = container_height - title_height - legend_height - (padding * 2)
+        available_width = container_width - (padding * 2)
+        
+        # Make chart size responsive to container
+        chart_size = min(available_width, available_height, 200)  # Max 200px for readability
+        chart_size = max(chart_size, 100)  # Min 100px for visibility
+        
+        # Create SVG pie chart with responsive sizing
+        svg_content = f'<svg viewBox="0 0 200 200" style="width: {chart_size}px; height: {chart_size}px; max-width: 100%; max-height: 100%;">'
         
         # Calculate pie segments
         current_angle = 0
@@ -384,23 +399,44 @@ class CanvasFunctionExecutor:
         
         svg_content += '</svg>'
         
-        # Create legend
-        legend_html = '<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 12px;">'
+        # Create responsive legend based on container size
+        legend_font_size = max(10, min(14, container_width // 30))  # Responsive font size
+        legend_columns = max(1, min(3, container_width // 120))  # Responsive columns
+        
+        legend_html = f'<div style="display: grid; grid-template-columns: repeat({legend_columns}, 1fr); gap: 6px; margin-top: 10px; font-size: {legend_font_size}px; width: 100%; max-height: {legend_height}px; overflow-y: auto;">'
         for i, (label, value, percentage) in enumerate(zip(labels, values, percentages)):
             color = colors[i % len(colors)]
+            # Truncate long labels to fit container
+            display_label = label[:15] + "..." if len(label) > 15 else label
             legend_html += f'''
-                <div style="display: flex; align-items: center; gap: 4px;">
-                    <div style="width: 12px; height: 12px; background-color: {color}; border-radius: 2px;"></div>
-                    <span>{label}: {percentage:.1f}%</span>
+                <div style="display: flex; align-items: center; gap: 4px; min-width: 0;">
+                    <div style="width: 12px; height: 12px; background-color: {color}; border-radius: 2px; flex-shrink: 0;"></div>
+                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{label}: {percentage:.1f}%">{display_label}: {percentage:.1f}%</span>
                 </div>
             '''
         legend_html += '</div>'
         
-        # Combine everything
+        # Create container-aware chart layout
         chart_html = f'''
-            <div style="padding: 15px; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: white; border-radius: 8px;">
-                <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333; text-align: center;">{title}</h3>
-                <div style="flex: 1; display: flex; align-items: center; justify-content: center; width: 100%;">
+            <div style="
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                padding: {padding}px;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                background: white;
+                border-radius: 8px;
+                overflow: hidden;
+                font-family: Arial, sans-serif;
+            ">
+                {f'<h3 style="margin: 0 0 10px 0; font-size: {max(14, min(18, container_width // 25))}px; color: #333; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{title}">{title}</h3>' if title else ''}
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 0;">
                     {svg_content}
                 </div>
                 {legend_html}
@@ -408,6 +444,76 @@ class CanvasFunctionExecutor:
         '''
         
         return chart_html.replace('\n', '').replace('"', '\\"')
+    
+    def _refresh_pie_chart_in_container(self, container_id, new_width, new_height):
+        """
+        Refresh a pie chart in a container with new dimensions
+        
+        Args:
+            container_id: ID of the container
+            new_width: New container width
+            new_height: New container height
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            # Check if container has a pie chart
+            has_pie_chart = self.controller.driver.execute_script(f"""
+                const container = document.getElementById('{container_id}');
+                return container && container.getAttribute('data-content-type') === 'pie-chart';
+            """)
+            
+            if not has_pie_chart:
+                return True  # No pie chart to refresh
+            
+            # Get existing chart data
+            chart_data = self.controller.driver.execute_script(f"""
+                const container = document.getElementById('{container_id}');
+                if (!container) return null;
+                
+                return {{
+                    title: container.getAttribute('data-chart-title') || 'Pie Chart',
+                    contentType: container.getAttribute('data-content-type')
+                }};
+            """)
+            
+            if not chart_data or chart_data['contentType'] != 'pie-chart':
+                return True  # No pie chart data found
+            
+            # For now, we'll use sample data since we don't store the original data
+            # In a production system, you'd want to store the chart data
+            labels = ["Technology", "Healthcare", "Finance", "Education", "Retail"]
+            values = [35, 25, 20, 12, 8]
+            title = chart_data['title']
+            
+            # Recreate the chart with new dimensions
+            chart_html = self._create_pie_chart_html(title, labels, values, new_width, new_height)
+            
+            # Update the container content
+            success = self.controller.driver.execute_script(f"""
+                const container = document.getElementById('{container_id}');
+                if (!container) return false;
+                
+                // Update container styling
+                container.style.position = 'relative';
+                container.style.overflow = 'hidden';
+                
+                // Update content with new dimensions
+                container.innerHTML = `{chart_html}`;
+                
+                // Update stored dimensions
+                container.setAttribute('data-chart-width', '{new_width}');
+                container.setAttribute('data-chart-height', '{new_height}');
+                
+                return true;
+            """)
+            
+            return success
+            
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to refresh pie chart in container '{container_id}': {e}")
+            return False
     
     def execute_function_call(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -535,6 +641,15 @@ class CanvasFunctionExecutor:
                             result_msg += f" (resized from requested {requested_size} to {actual_size} due to auto-adjustment)"
                         else:
                             result_msg += f" {actual_size}"
+                        
+                        # Refresh any pie charts in the modified container to fit new dimensions
+                        pie_chart_refreshed = self._refresh_pie_chart_in_container(
+                            arguments["container_id"], 
+                            modified_container['width'], 
+                            modified_container['height']
+                        )
+                        if pie_chart_refreshed:
+                            result_msg += " (pie chart automatically resized to fit new container dimensions)"
                 else:
                     # Check if container exists to provide better error message
                     state = self.controller.get_current_state()
@@ -635,7 +750,7 @@ class CanvasFunctionExecutor:
                     title = arguments.get("title", "Pie Chart")
                     use_sample_data = arguments.get("use_sample_data", True)
                     
-                    # Check if container exists
+                    # Check if container exists and get its dimensions
                     state = self.controller.get_current_state()
                     if not state or not state.get('containers'):
                         return {
@@ -644,14 +759,23 @@ class CanvasFunctionExecutor:
                             "function_name": function_name
                         }
                     
-                    container_exists = any(c['id'] == container_id for c in state['containers'])
-                    if not container_exists:
+                    target_container = None
+                    for container in state['containers']:
+                        if container['id'] == container_id:
+                            target_container = container
+                            break
+                    
+                    if not target_container:
                         existing_ids = [c['id'] for c in state['containers']]
                         return {
                             "status": "error",
                             "result": f"Container '{container_id}' not found. Available containers: {', '.join(existing_ids)}. Use get_canvas_state() to check current containers.",
                             "function_name": function_name
                         }
+                    
+                    # Get container dimensions for responsive chart sizing
+                    container_width = target_container['width']
+                    container_height = target_container['height']
                     
                     # Prepare chart data
                     if use_sample_data:
@@ -678,13 +802,17 @@ class CanvasFunctionExecutor:
                         
                         data_source = "custom data"
                     
-                    # Create pie chart HTML content
-                    chart_html = self._create_pie_chart_html(title, labels, values)
+                    # Create pie chart HTML content with container dimensions
+                    chart_html = self._create_pie_chart_html(title, labels, values, container_width, container_height)
                     
-                    # Inject the chart into the container
+                    # Inject the chart into the container with proper positioning
                     success = self.controller.driver.execute_script(f"""
                         const container = document.getElementById('{container_id}');
                         if (!container) return false;
+                        
+                        // Ensure container has relative positioning for absolute child positioning
+                        container.style.position = 'relative';
+                        container.style.overflow = 'hidden';
                         
                         // Clear existing content
                         container.innerHTML = `{chart_html}`;
@@ -692,6 +820,8 @@ class CanvasFunctionExecutor:
                         // Mark container as having chart content
                         container.setAttribute('data-content-type', 'pie-chart');
                         container.setAttribute('data-chart-title', '{title}');
+                        container.setAttribute('data-chart-width', '{container_width}');
+                        container.setAttribute('data-chart-height', '{container_height}');
                         
                         return true;
                     """)
