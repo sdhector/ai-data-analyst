@@ -187,7 +187,22 @@ function setupGridTemplates() {
         }
         
         // Show notification
-        alert('🧠 Smart Placement Algorithm test started! Check the console for detailed logs and watch the grid reorganize.');
+        console.log('🧠 Smart Placement Algorithm test started!');
+        
+        // Also add a simple test first
+        setTimeout(() => {
+            console.log('🔧 Testing basic container addition...');
+            try {
+                const testId = window.gridManager.addContainer({ 
+                    title: 'Debug Test', 
+                    contentType: 'generic' 
+                });
+                console.log('✅ Basic test successful, container ID:', testId);
+            } catch (error) {
+                console.error('❌ Basic test failed:', error);
+                console.error('Error details:', error.stack);
+            }
+        }, 100);
     };
 }
 

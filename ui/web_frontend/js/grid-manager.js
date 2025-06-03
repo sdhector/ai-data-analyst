@@ -128,7 +128,7 @@ class GridManager {
         }
 
         // Apply the new layout
-        this.applySmartLayout(placementResult);
+        this.applySmartLayoutResult(placementResult);
 
         // Log placement details
         console.log('Smart Placement Result:', {
@@ -143,7 +143,7 @@ class GridManager {
     /**
      * Apply smart layout result to the grid
      */
-    applySmartLayout(placementResult) {
+    applySmartLayoutResult(placementResult) {
         // Clear current grid
         this.clearGridSilently();
 

@@ -13,9 +13,14 @@ class SmartPlacementEngine {
      * Main placement function with reorganization capability
      */
     findOptimalPlacement(containers, newContainerRequirements) {
+        console.log('🔍 SmartPlacementEngine.findOptimalPlacement called');
+        console.log('📊 Current containers:', containers);
+        console.log('📋 New container requirements:', newContainerRequirements);
+        
         // Try normal placement first (without reorganization)
         const normalPlacement = this.tryNormalPlacement(containers, newContainerRequirements);
         if (normalPlacement) {
+            console.log('✅ Normal placement successful:', normalPlacement);
             return {
                 success: true,
                 reorganizationNeeded: false,
@@ -24,6 +29,7 @@ class SmartPlacementEngine {
             };
         }
 
+        console.log('🔄 Normal placement failed, attempting reorganization...');
         // Normal placement failed - need reorganization
         return this.performReorganization(containers, newContainerRequirements);
     }
