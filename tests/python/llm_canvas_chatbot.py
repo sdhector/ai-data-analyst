@@ -264,6 +264,20 @@ Be helpful, clear, and always confirm successful operations with a final summary
                     "properties": {},
                     "required": []
                 }
+            },
+            {
+                "name": "check_container_content",
+                "description": "Check what content is in a specific container (useful for verifying pie charts or other content)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "container_id": {
+                            "type": "string",
+                            "description": "ID of the container to check"
+                        }
+                    },
+                    "required": ["container_id"]
+                }
             }
         ]
     
@@ -829,6 +843,11 @@ class CanvasFunctionExecutor:
                     
                     # Inject the chart into the container using safer DOM manipulation
                     # First, pass the HTML content as an argument to avoid escaping issues
+                    import time
+                    
+                    # Add a small delay to ensure container is fully ready
+                    time.sleep(0.1)
+                    
                     success = self.controller.driver.execute_script("""
                         const container = document.getElementById(arguments[0]);
                         if (!container) {
@@ -844,13 +863,30 @@ class CanvasFunctionExecutor:
                             // Clear existing content
                             container.innerHTML = '';
                             
+                            // Small delay to ensure DOM is ready
+                            setTimeout(() => {}, 10);
+                            
                             // Create a temporary div to parse the HTML safely
                             const tempDiv = document.createElement('div');
                             tempDiv.innerHTML = arguments[1];
                             
+                            // Verify the HTML was parsed correctly
+                            if (tempDiv.children.length === 0) {
+                                console.error('No child elements found in parsed HTML for container:', arguments[0]);
+                                console.log('HTML content length:', arguments[1].length);
+                                console.log('HTML content preview:', arguments[1].substring(0, 100));
+                                return false;
+                            }
+                            
                             // Move all child nodes from temp div to container
                             while (tempDiv.firstChild) {
                                 container.appendChild(tempDiv.firstChild);
+                            }
+                            
+                            // Verify the content was added
+                            if (container.children.length === 0) {
+                                console.error('No children added to container after HTML injection:', arguments[0]);
+                                return false;
                             }
                             
                             // Mark container as having chart content
@@ -859,7 +895,7 @@ class CanvasFunctionExecutor:
                             container.setAttribute('data-chart-width', arguments[3]);
                             container.setAttribute('data-chart-height', arguments[4]);
                             
-                            console.log('Pie chart successfully injected into container:', arguments[0]);
+                            console.log('Pie chart successfully injected into container:', arguments[0], 'with', container.children.length, 'child elements');
                             return true;
                             
                         } catch (error) {
@@ -914,6 +950,110 @@ class CanvasFunctionExecutor:
                     },
                     "function_name": function_name
                 }
+            
+            elif function_name == "check_container_content":
+                try:
+                    container_id = arguments["container_id"]
+                    
+                    # Check if container exists first
+                    state = self.controller.get_current_state()
+                    if not state or not state.get('containers'):
+                        return {
+                            "status": "error",
+                            "result": f"No containers exist on canvas. Cannot check container '{container_id}'.",
+                            "function_name": function_name
+                        }
+                    
+                    container_exists = any(c['id'] == container_id for c in state['containers'])
+                    if not container_exists:
+                        existing_ids = [c['id'] for c in state['containers']]
+                        return {
+                            "status": "error",
+                            "result": f"Container '{container_id}' not found. Available containers: {', '.join(existing_ids)}",
+                            "function_name": function_name
+                        }
+                    
+                    # Get detailed container content information
+                    content_info = self.controller.driver.execute_script("""
+                        const container = document.getElementById(arguments[0]);
+                        if (!container) return {error: 'Container not found in DOM'};
+                        
+                        // Get all relevant information about the container content
+                        const result = {
+                            exists: true,
+                            hasContent: container.innerHTML.length > 0,
+                            contentType: container.getAttribute('data-content-type'),
+                            chartTitle: container.getAttribute('data-chart-title'),
+                            chartWidth: container.getAttribute('data-chart-width'),
+                            chartHeight: container.getAttribute('data-chart-height'),
+                            childCount: container.children.length,
+                            innerHTML: container.innerHTML.length > 0 ? container.innerHTML.substring(0, 200) + '...' : 'Empty',
+                            containerStyle: {
+                                position: container.style.position,
+                                overflow: container.style.overflow,
+                                width: container.offsetWidth + 'px',
+                                height: container.offsetHeight + 'px'
+                            }
+                        };
+                        
+                        // Check for specific content types
+                        if (result.contentType === 'pie-chart') {
+                            result.hasPieChart = true;
+                            result.pieChartElements = {
+                                hasSVG: container.querySelector('svg') !== null,
+                                hasLegend: container.querySelector('div[style*="grid"]') !== null,
+                                hasTitle: container.querySelector('h3') !== null
+                            };
+                        } else {
+                            result.hasPieChart = false;
+                        }
+                        
+                        return result;
+                    """, container_id)
+                    
+                    # Format the result for better readability
+                    if content_info.get('error'):
+                        result_msg = f"Error checking container '{container_id}': {content_info['error']}"
+                        status = "error"
+                    else:
+                        # Create a comprehensive summary
+                        summary_parts = []
+                        
+                        if content_info.get('hasPieChart'):
+                            summary_parts.append(f"✅ Contains PIE CHART: '{content_info.get('chartTitle', 'Unknown Title')}'")
+                            pie_elements = content_info.get('pieChartElements', {})
+                            element_status = []
+                            if pie_elements.get('hasSVG'): element_status.append("SVG")
+                            if pie_elements.get('hasLegend'): element_status.append("Legend") 
+                            if pie_elements.get('hasTitle'): element_status.append("Title")
+                            if element_status:
+                                summary_parts.append(f"   Chart elements: {', '.join(element_status)}")
+                        elif content_info.get('contentType'):
+                            summary_parts.append(f"📄 Contains: {content_info['contentType'].upper()}")
+                        elif content_info.get('hasContent'):
+                            summary_parts.append("📝 Has content but no specific type identified")
+                        else:
+                            summary_parts.append("📭 Container is EMPTY")
+                        
+                        summary_parts.append(f"   Child elements: {content_info.get('childCount', 0)}")
+                        summary_parts.append(f"   Content length: {len(content_info.get('innerHTML', '')) - 3} characters")  # -3 for '...'
+                        
+                        result_msg = f"Container '{container_id}' content check:\n" + "\n".join(summary_parts)
+                        status = "success"
+                    
+                    return {
+                        "status": status,
+                        "result": result_msg,
+                        "detailed_info": content_info,
+                        "function_name": function_name
+                    }
+                    
+                except Exception as e:
+                    return {
+                        "status": "error",
+                        "result": f"Error checking container '{arguments.get('container_id', 'unknown')}': {str(e)}",
+                        "function_name": function_name
+                    }
             
             else:
                 return {
@@ -1169,6 +1309,7 @@ Available Commands:
 • Canvas size: "What's the current canvas size?" or "Resize canvas to 1000x800"
 • Behavior control: "Turn off overlap prevention" or "Enable auto-adjustment"
 • Check settings: "What are the current canvas settings?"
+• Check container content: "Check what's in container 'chart1'" or "Verify the pie chart in container 'sales_chart'"
 
 Natural Language Examples:
 • "Put a small container in the top left corner"
