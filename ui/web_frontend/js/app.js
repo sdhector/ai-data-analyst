@@ -106,46 +106,88 @@ function setupGridTemplates() {
 
     // Test function for smart placement
     window.testSmartPlacement = () => {
-        console.log('Testing Smart Placement Algorithm...');
+        console.log('🧠 Testing Smart Placement Algorithm...');
+        
+        // Check if gridManager is available
+        if (!window.gridManager) {
+            console.error('❌ GridManager not available');
+            alert('GridManager not initialized yet. Please wait a moment and try again.');
+            return;
+        }
+
+        // Check if smart engine is available
+        if (!window.gridManager.smartEngine) {
+            console.error('❌ Smart Placement Engine not available');
+            alert('Smart Placement Engine not initialized. Please refresh the page.');
+            return;
+        }
+
+        console.log('✅ Smart Placement Engine ready');
         
         // Clear grid first
         window.gridManager.clearGrid();
         
         // Add containers one by one to test the algorithm
         setTimeout(() => {
-            console.log('Adding first container (line_chart)...');
-            window.gridManager.addContainer({ 
-                title: 'Sales Trends', 
-                contentType: 'line_chart' 
-            });
+            console.log('🔍 Adding first container (line_chart)...');
+            try {
+                window.gridManager.addContainer({ 
+                    title: 'Sales Trends', 
+                    contentType: 'line_chart' 
+                });
+                console.log('✅ First container added successfully');
+            } catch (error) {
+                console.error('❌ Error adding first container:', error);
+            }
         }, 500);
         
         setTimeout(() => {
-            console.log('Adding second container (kpi_card)...');
-            window.gridManager.addContainer({ 
-                title: 'Key Metrics', 
-                contentType: 'kpi_card' 
-            });
+            console.log('🔍 Adding second container (kpi_card)...');
+            try {
+                window.gridManager.addContainer({ 
+                    title: 'Key Metrics', 
+                    contentType: 'kpi_card' 
+                });
+                console.log('✅ Second container added successfully');
+            } catch (error) {
+                console.error('❌ Error adding second container:', error);
+            }
         }, 1500);
         
         setTimeout(() => {
-            console.log('Adding third container (bar_chart)...');
-            window.gridManager.addContainer({ 
-                title: 'Category Analysis', 
-                contentType: 'bar_chart' 
-            });
+            console.log('🔍 Adding third container (bar_chart)...');
+            try {
+                window.gridManager.addContainer({ 
+                    title: 'Category Analysis', 
+                    contentType: 'bar_chart' 
+                });
+                console.log('✅ Third container added successfully');
+            } catch (error) {
+                console.error('❌ Error adding third container:', error);
+            }
         }, 2500);
         
         setTimeout(() => {
-            console.log('Adding fourth container (data_table)...');
-            window.gridManager.addContainer({ 
-                title: 'Data Details', 
-                contentType: 'data_table' 
-            });
+            console.log('🔍 Adding fourth container (data_table)...');
+            try {
+                window.gridManager.addContainer({ 
+                    title: 'Data Details', 
+                    contentType: 'data_table' 
+                });
+                console.log('✅ Fourth container added successfully');
+                console.log('🎉 Smart Placement Algorithm test completed!');
+            } catch (error) {
+                console.error('❌ Error adding fourth container:', error);
+            }
         }, 3500);
         
-        // Close the modal
-        window.gridManager.closeGridConfig();
+        // Close the modal if it's open
+        if (window.gridManager.closeGridConfig) {
+            window.gridManager.closeGridConfig();
+        }
+        
+        // Show notification
+        alert('🧠 Smart Placement Algorithm test started! Check the console for detailed logs and watch the grid reorganize.');
     };
 }
 
