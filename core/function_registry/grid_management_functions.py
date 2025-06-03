@@ -11,7 +11,7 @@ import uuid
 # Global grid state (in production, this would be managed by a proper state manager)
 _grid_containers = {}
 _grid_layout = {
-    "grid_size": 6,  # 6x6 grid
+    "grid_size": 3,  # 3x3 grid
     "containers": {}
 }
 
@@ -24,10 +24,10 @@ def add_container(position: str = None,
     
     Args:
         position: Natural language position (e.g., "bottom right", "top left")
-        start_row: Starting row (0-5)
-        start_col: Starting column (0-5)
-        end_row: Ending row (0-5)
-        end_col: Ending column (0-5)
+        start_row: Starting row (0-2)
+        start_col: Starting column (0-2)
+        end_row: Ending row (0-2)
+        end_col: Ending column (0-2)
         title: Container title
         
     Returns:
@@ -58,7 +58,7 @@ def add_container(position: str = None,
         if not _validate_coordinates(start_row, start_col, end_row, end_col):
             return {
                 "status": "error",
-                "error": f"Invalid coordinates: must be within 0-5 range"
+                "error": f"Invalid coordinates: must be within 0-2 range"
             }
         
         # Check if cells are available
@@ -436,11 +436,11 @@ def get_grid_status() -> Dict[str, Any]:
                 "containers": containers_info,
                 "total_containers": len(_grid_containers),
                 "occupied_cells": _count_occupied_cells(),
-                "available_cells": 36 - _count_occupied_cells(),
+                "available_cells": 9 - _count_occupied_cells(),
                 "grid_visualization": grid_visual
             },
             "metadata": {
-                "grid_full": _count_occupied_cells() >= 36
+                "grid_full": _count_occupied_cells() >= 9
             }
         }
         
@@ -512,8 +512,8 @@ def update_container_content(container_id: str, content: Dict[str, Any],
 # Helper functions
 def _validate_coordinates(start_row: int, start_col: int, end_row: int, end_col: int) -> bool:
     """Validate grid coordinates"""
-    return (0 <= start_row <= end_row < 6 and 
-            0 <= start_col <= end_col < 6)
+    return (0 <= start_row <= end_row < 3 and 
+            0 <= start_col <= end_col < 3)
 
 def _are_cells_available(start_row: int, start_col: int, end_row: int, end_col: int, 
                         exclude_container: str = None) -> bool:
@@ -546,13 +546,13 @@ def _get_grid_status_summary() -> Dict[str, Any]:
     return {
         "total_containers": len(_grid_containers),
         "occupied_cells": occupied,
-        "available_cells": 36 - occupied,
-        "utilization": f"{(occupied / 36) * 100:.1f}%"
+        "available_cells": 9 - occupied,
+        "utilization": f"{(occupied / 9) * 100:.1f}%"
     }
 
 def _create_grid_visualization() -> List[List[str]]:
     """Create ASCII visualization of the grid"""
-    grid = [["." for _ in range(6)] for _ in range(6)]
+    grid = [["." for _ in range(3)] for _ in range(3)]
     
     for container_id, coords in _grid_layout["containers"].items():
         # Use first letter of container ID for visualization
@@ -567,32 +567,32 @@ def _parse_position_description(position: str) -> Dict[str, int]:
     """Parse natural language position description"""
     position = position.lower().strip()
     
-    # Position mappings for common descriptions
+    # Position mappings for common descriptions (3x3 grid)
     positions = {
         # Corners
-        "top left": {"start_row": 0, "start_col": 0, "end_row": 2, "end_col": 2},
-        "top right": {"start_row": 0, "start_col": 3, "end_row": 2, "end_col": 5},
-        "bottom left": {"start_row": 3, "start_col": 0, "end_row": 5, "end_col": 2},
-        "bottom right": {"start_row": 3, "start_col": 3, "end_row": 5, "end_col": 5},
+        "top left": {"start_row": 0, "start_col": 0, "end_row": 0, "end_col": 0},
+        "top right": {"start_row": 0, "start_col": 2, "end_row": 0, "end_col": 2},
+        "bottom left": {"start_row": 2, "start_col": 0, "end_row": 2, "end_col": 0},
+        "bottom right": {"start_row": 2, "start_col": 2, "end_row": 2, "end_col": 2},
         
         # Edges
-        "top": {"start_row": 0, "start_col": 0, "end_row": 2, "end_col": 5},
-        "bottom": {"start_row": 3, "start_col": 0, "end_row": 5, "end_col": 5},
-        "left": {"start_row": 0, "start_col": 0, "end_row": 5, "end_col": 2},
-        "right": {"start_row": 0, "start_col": 3, "end_row": 5, "end_col": 5},
+        "top": {"start_row": 0, "start_col": 0, "end_row": 0, "end_col": 2},
+        "bottom": {"start_row": 2, "start_col": 0, "end_row": 2, "end_col": 2},
+        "left": {"start_row": 0, "start_col": 0, "end_row": 2, "end_col": 0},
+        "right": {"start_row": 0, "start_col": 2, "end_row": 2, "end_col": 2},
         
         # Center positions
-        "center": {"start_row": 2, "start_col": 2, "end_row": 3, "end_col": 3},
-        "middle": {"start_row": 2, "start_col": 2, "end_row": 3, "end_col": 3},
+        "center": {"start_row": 1, "start_col": 1, "end_row": 1, "end_col": 1},
+        "middle": {"start_row": 1, "start_col": 1, "end_row": 1, "end_col": 1},
         
         # Full grid
-        "full": {"start_row": 0, "start_col": 0, "end_row": 5, "end_col": 5},
-        "entire": {"start_row": 0, "start_col": 0, "end_row": 5, "end_col": 5},
+        "full": {"start_row": 0, "start_col": 0, "end_row": 2, "end_col": 2},
+        "entire": {"start_row": 0, "start_col": 0, "end_row": 2, "end_col": 2},
         
-        # Specific sizes
-        "small": {"start_row": 0, "start_col": 0, "end_row": 1, "end_col": 1},
-        "medium": {"start_row": 0, "start_col": 0, "end_row": 2, "end_col": 2},
-        "large": {"start_row": 0, "start_col": 0, "end_row": 3, "end_col": 3}
+        # Specific sizes (all single cell in 3x3)
+        "small": {"start_row": 0, "start_col": 0, "end_row": 0, "end_col": 0},
+        "medium": {"start_row": 0, "start_col": 0, "end_row": 1, "end_col": 1},
+        "large": {"start_row": 0, "start_col": 0, "end_row": 2, "end_col": 2}
     }
     
     # Look for matches
@@ -607,10 +607,10 @@ def _parse_position_description(position: str) -> Dict[str, int]:
                 coords["end_row"] = coords["start_row"] + max(0, height // 2 - 1)
             elif "large" in position and key not in ["small", "medium", "large"]:
                 # Make it larger (but stay within bounds)
-                coords["end_col"] = min(5, coords["end_col"] + 1)
-                coords["end_row"] = min(5, coords["end_row"] + 1)
+                coords["end_col"] = min(2, coords["end_col"] + 1)
+                coords["end_row"] = min(2, coords["end_row"] + 1)
                 
             return coords
     
     # Default to small container at top-left
-    return {"start_row": 0, "start_col": 0, "end_row": 1, "end_col": 1} 
+    return {"start_row": 0, "start_col": 0, "end_row": 0, "end_col": 0} 

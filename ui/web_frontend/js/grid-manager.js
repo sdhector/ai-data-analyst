@@ -5,7 +5,7 @@
 
 class GridManager {
     constructor() {
-        this.gridSize = 6; // 6x6 grid
+        this.gridSize = 3; // 3x3 grid
         this.containers = new Map(); // Map of container ID to container data
         this.gridCells = []; // Array of grid cell elements
         this.gridContainer = null;
@@ -26,7 +26,7 @@ class GridManager {
         this.gridContainer.innerHTML = '';
         this.gridCells = [];
 
-        // Create 6x6 grid cells
+        // Create 3x3 grid cells
         for (let row = 0; row < this.gridSize; row++) {
             for (let col = 0; col < this.gridSize; col++) {
                 const cell = document.createElement('div');
@@ -236,7 +236,7 @@ class GridManager {
             case 'single':
                 this.addContainer({
                     startRow: 0, startCol: 0,
-                    endRow: 5, endCol: 5,
+                    endRow: 2, endCol: 2,
                     title: 'Main Dashboard'
                 });
                 break;
@@ -244,12 +244,12 @@ class GridManager {
             case 'two-columns':
                 this.addContainer({
                     startRow: 0, startCol: 0,
-                    endRow: 5, endCol: 2,
+                    endRow: 2, endCol: 0,
                     title: 'Left Panel'
                 });
                 this.addContainer({
-                    startRow: 0, startCol: 3,
-                    endRow: 5, endCol: 5,
+                    startRow: 0, startCol: 1,
+                    endRow: 2, endCol: 2,
                     title: 'Right Panel'
                 });
                 break;
@@ -257,12 +257,12 @@ class GridManager {
             case 'two-rows':
                 this.addContainer({
                     startRow: 0, startCol: 0,
-                    endRow: 2, endCol: 5,
+                    endRow: 0, endCol: 2,
                     title: 'Top Panel'
                 });
                 this.addContainer({
-                    startRow: 3, startCol: 0,
-                    endRow: 5, endCol: 5,
+                    startRow: 1, startCol: 0,
+                    endRow: 2, endCol: 2,
                     title: 'Bottom Panel'
                 });
                 break;
@@ -270,22 +270,22 @@ class GridManager {
             case 'quadrants':
                 this.addContainer({
                     startRow: 0, startCol: 0,
-                    endRow: 2, endCol: 2,
+                    endRow: 0, endCol: 0,
                     title: 'Top Left'
                 });
                 this.addContainer({
-                    startRow: 0, startCol: 3,
-                    endRow: 2, endCol: 5,
+                    startRow: 0, startCol: 2,
+                    endRow: 0, endCol: 2,
                     title: 'Top Right'
                 });
                 this.addContainer({
-                    startRow: 3, startCol: 0,
-                    endRow: 5, endCol: 2,
+                    startRow: 2, startCol: 0,
+                    endRow: 2, endCol: 0,
                     title: 'Bottom Left'
                 });
                 this.addContainer({
-                    startRow: 3, startCol: 3,
-                    endRow: 5, endCol: 5,
+                    startRow: 2, startCol: 2,
+                    endRow: 2, endCol: 2,
                     title: 'Bottom Right'
                 });
                 break;
@@ -293,17 +293,17 @@ class GridManager {
             case 'three-columns':
                 this.addContainer({
                     startRow: 0, startCol: 0,
-                    endRow: 5, endCol: 1,
+                    endRow: 2, endCol: 0,
                     title: 'Left Column'
                 });
                 this.addContainer({
-                    startRow: 0, startCol: 2,
-                    endRow: 5, endCol: 3,
+                    startRow: 0, startCol: 1,
+                    endRow: 2, endCol: 1,
                     title: 'Center Column'
                 });
                 this.addContainer({
-                    startRow: 0, startCol: 4,
-                    endRow: 5, endCol: 5,
+                    startRow: 0, startCol: 2,
+                    endRow: 2, endCol: 2,
                     title: 'Right Column'
                 });
                 break;
@@ -353,7 +353,7 @@ class GridManager {
         this.selectedCells.clear();
 
         // Create designer grid
-        for (let i = 0; i < 36; i++) {
+        for (let i = 0; i < 9; i++) {
             const cell = document.createElement('div');
             cell.className = 'designer-cell';
             cell.dataset.designIndex = i;
@@ -391,10 +391,10 @@ class GridManager {
         if (!this.isDesigning) return;
         
         // Calculate rectangle from drag start to current
-        const startRow = Math.floor(this.dragStart / 6);
-        const startCol = this.dragStart % 6;
-        const currentRow = Math.floor(index / 6);
-        const currentCol = index % 6;
+        const startRow = Math.floor(this.dragStart / 3);
+        const startCol = this.dragStart % 3;
+        const currentRow = Math.floor(index / 3);
+        const currentCol = index % 3;
         
         const minRow = Math.min(startRow, currentRow);
         const maxRow = Math.max(startRow, currentRow);
@@ -405,7 +405,7 @@ class GridManager {
         this.selectedCells.clear();
         for (let row = minRow; row <= maxRow; row++) {
             for (let col = minCol; col <= maxCol; col++) {
-                this.selectedCells.add(row * 6 + col);
+                this.selectedCells.add(row * 3 + col);
             }
         }
         
@@ -438,8 +438,8 @@ class GridManager {
 
         // Calculate bounds
         const indices = Array.from(this.selectedCells);
-        const rows = indices.map(i => Math.floor(i / 6));
-        const cols = indices.map(i => i % 6);
+        const rows = indices.map(i => Math.floor(i / 3));
+        const cols = indices.map(i => i % 3);
         
         const startRow = Math.min(...rows);
         const endRow = Math.max(...rows);
