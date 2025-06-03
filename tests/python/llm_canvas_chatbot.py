@@ -62,9 +62,8 @@ Canvas specifications:
 - Size values: width, height in pixels
 
 Canvas behavior controls:
-- Auto-adjustment: When enabled, containers automatically fit within canvas bounds
-- Overlap prevention: When enabled, containers avoid overlapping with existing ones
-- You can toggle these settings using toggle_auto_adjust and toggle_overlap_prevention functions
+- Auto-adjustment: Containers automatically fit within canvas bounds (always enabled for safety)
+- Overlap prevention: Containers avoid overlapping with existing ones (always enabled for safety)
 - Use get_canvas_settings to check current behavior settings
 
 When users request canvas operations:
@@ -73,15 +72,16 @@ When users request canvas operations:
 3. Always explain what you're doing
 4. Provide feedback on the results
 5. If a function fails, check the error message and try alternative approaches
-6. Consider adjusting behavior settings if users want specific placement behavior
+6. If placement fails due to safety constraints, explain why and suggest alternatives
 7. Always provide a final text response summarizing what was accomplished
 8. Suggest next steps if helpful
 
 Important guidelines:
 - Container IDs must match exactly what exists on canvas (check with get_canvas_state first)
-- When overlap prevention is enabled, containers may be automatically repositioned
-- When auto-adjustment is enabled, containers may be resized to fit canvas bounds
+- Containers may be automatically repositioned to prevent overlaps (safety feature)
+- Containers may be resized to fit canvas bounds (safety feature)
 - Always acknowledge when automatic adjustments occur
+- If a container cannot be placed due to safety constraints, explain why and suggest alternatives
 
 Be helpful, clear, and always confirm successful operations with a final summary."""
     
@@ -221,34 +221,7 @@ Be helpful, clear, and always confirm successful operations with a final summary
                     "required": ["width", "height"]
                 }
             },
-            {
-                "name": "toggle_auto_adjust",
-                "description": "Enable or disable automatic container adjustment to fit within canvas bounds",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "enabled": {
-                            "type": "boolean",
-                            "description": "True to enable auto-adjustment, False to disable"
-                        }
-                    },
-                    "required": ["enabled"]
-                }
-            },
-            {
-                "name": "toggle_overlap_prevention",
-                "description": "Enable or disable automatic overlap prevention for containers",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "enabled": {
-                            "type": "boolean",
-                            "description": "True to enable overlap prevention, False to allow overlapping"
-                        }
-                    },
-                    "required": ["enabled"]
-                }
-            },
+
             {
                 "name": "get_canvas_settings",
                 "description": "Get current canvas behavior settings (auto-adjust and overlap prevention status)",
@@ -538,23 +511,6 @@ class CanvasFunctionExecutor:
                         "function_name": function_name
                     }
             
-            elif function_name == "toggle_auto_adjust":
-                self.chatbot.auto_adjust_enabled = arguments["enabled"]
-                status = "enabled" if arguments["enabled"] else "disabled"
-                return {
-                    "status": "success",
-                    "result": f"Auto-adjustment {status}. Containers will {'automatically fit within canvas bounds' if arguments['enabled'] else 'be placed at exact positions (may extend beyond canvas)'}.",
-                    "function_name": function_name
-                }
-            
-            elif function_name == "toggle_overlap_prevention":
-                self.chatbot.overlap_prevention_enabled = arguments["enabled"]
-                status = "enabled" if arguments["enabled"] else "disabled"
-                return {
-                    "status": "success",
-                    "result": f"Overlap prevention {status}. Containers will {'automatically avoid overlapping' if arguments['enabled'] else 'be allowed to overlap'}.",
-                    "function_name": function_name
-                }
             
             elif function_name == "get_canvas_settings":
                 return {
@@ -573,8 +529,7 @@ class CanvasFunctionExecutor:
                     "error": f"Unknown function: {function_name}",
                     "available_functions": ["create_container", "delete_container", "modify_container", 
                                           "get_canvas_state", "clear_canvas", "take_screenshot", 
-                                          "get_canvas_size", "edit_canvas_size", "toggle_auto_adjust",
-                                          "toggle_overlap_prevention", "get_canvas_settings"]
+                                          "get_canvas_size", "edit_canvas_size", "get_canvas_settings"]
                 }
                 
         except Exception as e:
