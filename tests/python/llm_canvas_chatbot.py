@@ -53,20 +53,26 @@ Available capabilities:
 - Clear all containers
 - Take screenshots
 - Edit canvas size
+- Control canvas behavior settings (auto-adjustment and overlap prevention)
 
 Canvas specifications:
 - Default size: 800x600 pixels (customizable)
 - Coordinate system: Top-left origin (0,0)
 - Position values: x, y coordinates in pixels
 - Size values: width, height in pixels
-- Auto-adjustment: Containers automatically fit within canvas bounds
-- Overlap prevention: Containers avoid overlapping with existing ones
+
+Canvas behavior controls:
+- Auto-adjustment: When enabled, containers automatically fit within canvas bounds
+- Overlap prevention: When enabled, containers avoid overlapping with existing ones
+- You can toggle these settings using toggle_auto_adjust and toggle_overlap_prevention functions
+- Use get_canvas_settings to check current behavior settings
 
 When users request canvas operations:
 1. Use the appropriate function to perform the action
 2. Always explain what you're doing
 3. Provide feedback on the results
-4. Suggest next steps if helpful
+4. Consider adjusting behavior settings if users want specific placement behavior
+5. Suggest next steps if helpful
 
 Be helpful, clear, and always confirm successful operations."""
     
@@ -205,6 +211,43 @@ Be helpful, clear, and always confirm successful operations."""
                     },
                     "required": ["width", "height"]
                 }
+            },
+            {
+                "name": "toggle_auto_adjust",
+                "description": "Enable or disable automatic container adjustment to fit within canvas bounds",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "True to enable auto-adjustment, False to disable"
+                        }
+                    },
+                    "required": ["enabled"]
+                }
+            },
+            {
+                "name": "toggle_overlap_prevention",
+                "description": "Enable or disable automatic overlap prevention for containers",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "True to enable overlap prevention, False to allow overlapping"
+                        }
+                    },
+                    "required": ["enabled"]
+                }
+            },
+            {
+                "name": "get_canvas_settings",
+                "description": "Get current canvas behavior settings (auto-adjust and overlap prevention status)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
             }
         ]
     
@@ -252,14 +295,16 @@ class CanvasFunctionExecutor:
     Function executor that bridges LLM function calls to canvas controller operations
     """
     
-    def __init__(self, canvas_controller: CanvasController):
+    def __init__(self, canvas_controller: CanvasController, chatbot_instance):
         """
         Initialize with a canvas controller instance
         
         Args:
             canvas_controller: CanvasController instance
+            chatbot_instance: Reference to chatbot for accessing settings
         """
         self.controller = canvas_controller
+        self.chatbot = chatbot_instance
     
     def execute_function_call(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -281,7 +326,9 @@ class CanvasFunctionExecutor:
                     x=arguments["x"],
                     y=arguments["y"],
                     width=arguments["width"],
-                    height=arguments["height"]
+                    height=arguments["height"],
+                    auto_adjust=self.chatbot.auto_adjust_enabled,
+                    avoid_overlap=self.chatbot.overlap_prevention_enabled
                 )
                 return {
                     "status": "success" if result else "error",
@@ -303,7 +350,9 @@ class CanvasFunctionExecutor:
                     x=arguments["x"],
                     y=arguments["y"],
                     width=arguments["width"],
-                    height=arguments["height"]
+                    height=arguments["height"],
+                    auto_adjust=self.chatbot.auto_adjust_enabled,
+                    avoid_overlap=self.chatbot.overlap_prevention_enabled
                 )
                 return {
                     "status": "success" if result else "error",
@@ -366,13 +415,43 @@ class CanvasFunctionExecutor:
                         "function_name": function_name
                     }
             
+            elif function_name == "toggle_auto_adjust":
+                self.chatbot.auto_adjust_enabled = arguments["enabled"]
+                status = "enabled" if arguments["enabled"] else "disabled"
+                return {
+                    "status": "success",
+                    "result": f"Auto-adjustment {status}. Containers will {'automatically fit within canvas bounds' if arguments['enabled'] else 'be placed at exact positions (may extend beyond canvas)'}.",
+                    "function_name": function_name
+                }
+            
+            elif function_name == "toggle_overlap_prevention":
+                self.chatbot.overlap_prevention_enabled = arguments["enabled"]
+                status = "enabled" if arguments["enabled"] else "disabled"
+                return {
+                    "status": "success",
+                    "result": f"Overlap prevention {status}. Containers will {'automatically avoid overlapping' if arguments['enabled'] else 'be allowed to overlap'}.",
+                    "function_name": function_name
+                }
+            
+            elif function_name == "get_canvas_settings":
+                return {
+                    "status": "success",
+                    "result": {
+                        "auto_adjust": self.chatbot.auto_adjust_enabled,
+                        "overlap_prevention": self.chatbot.overlap_prevention_enabled,
+                        "summary": f"Auto-adjust: {'ON' if self.chatbot.auto_adjust_enabled else 'OFF'}, Overlap prevention: {'ON' if self.chatbot.overlap_prevention_enabled else 'OFF'}"
+                    },
+                    "function_name": function_name
+                }
+            
             else:
                 return {
                     "status": "error",
                     "error": f"Unknown function: {function_name}",
                     "available_functions": ["create_container", "delete_container", "modify_container", 
                                           "get_canvas_state", "clear_canvas", "take_screenshot", 
-                                          "get_canvas_size", "edit_canvas_size"]
+                                          "get_canvas_size", "edit_canvas_size", "toggle_auto_adjust",
+                                          "toggle_overlap_prevention", "get_canvas_settings"]
                 }
                 
         except Exception as e:
@@ -387,20 +466,22 @@ class CanvasChatbot:
     Main chatbot class that orchestrates LLM and canvas operations
     """
     
-    def __init__(self, headless: bool = False, max_function_calls: int = 10):
+    def __init__(self, headless: bool = False):
         """
         Initialize the chatbot
         
         Args:
             headless: Whether to run browser in headless mode
-            max_function_calls: Maximum function calls per user message
         """
         self.headless = headless
         self.canvas_controller = None
         self.llm_client = None
         self.function_executor = None
         self.conversation_history = []
-        self.max_function_calls_per_turn = max_function_calls
+        
+        # Canvas behavior settings that LLM can control
+        self.auto_adjust_enabled = True
+        self.overlap_prevention_enabled = True
         
     def initialize(self):
         """Initialize all components"""
@@ -415,7 +496,7 @@ class CanvasChatbot:
         self.llm_client = CanvasLLMClient()
         
         # Initialize function executor
-        self.function_executor = CanvasFunctionExecutor(self.canvas_controller)
+        self.function_executor = CanvasFunctionExecutor(self.canvas_controller, self)
         
         print("✅ Chatbot initialized successfully!")
         print("💡 You can now give me commands to control the canvas.")
@@ -451,7 +532,7 @@ class CanvasChatbot:
         
         function_calls_made = 0
         
-        while function_calls_made < self.max_function_calls_per_turn:
+        while True:
             # Get LLM response
             response = self.llm_client.chat_completion(
                 messages=messages,
@@ -497,6 +578,13 @@ class CanvasChatbot:
                 
                 function_calls_made += 1
                 
+                # Check if we should prompt user to continue after 25 calls
+                if function_calls_made >= 25:
+                    print(f"\n⚠️ Made {function_calls_made} function calls.")
+                    continue_choice = input("🤔 Continue with more function calls? (y/N): ").strip().lower()
+                    if continue_choice != 'y':
+                        return f"⏹️ Stopped after {function_calls_made} function calls at user request."
+                
                 # If function failed critically, break
                 if function_result["status"] == "error":
                     break
@@ -521,7 +609,8 @@ class CanvasChatbot:
                 
                 return final_response
         
-        return f"⚠️ Reached maximum function calls limit ({self.max_function_calls_per_turn}). Some operations may be incomplete. Try breaking your request into smaller steps or increase the limit."
+        # This should never be reached due to the while True loop
+        return "⚠️ Unexpected end of function calling loop."
     
     def show_help(self):
         """Show help information"""
@@ -536,6 +625,8 @@ Available Commands:
 • Clear canvas: "Clear all containers"
 • Take screenshot: "Take a screenshot and save it as 'my_canvas.png'"
 • Canvas size: "What's the current canvas size?" or "Resize canvas to 1000x800"
+• Behavior control: "Turn off overlap prevention" or "Enable auto-adjustment"
+• Check settings: "What are the current canvas settings?"
 
 Natural Language Examples:
 • "Put a small container in the top left corner"
@@ -543,15 +634,17 @@ Natural Language Examples:
 • "Make a large container in the center"
 • "Remove all containers and start fresh"
 • "Show me what's on the canvas right now"
+• "Allow containers to overlap"
+• "Turn off auto-adjustment so I can place containers exactly where I want"
 
 Tips:
 • Be specific about positions (x,y coordinates) and sizes (width x height)
 • Container IDs should be unique strings
 • Canvas coordinates start at (0,0) in the top-left corner
-• The system will auto-adjust containers to fit within canvas bounds
-• Containers automatically avoid overlapping with existing ones
-• For complex operations, break requests into smaller steps
-• Use 'set limit X' to adjust function call limit (current: {self.max_function_calls_per_turn})
+• Auto-adjustment and overlap prevention are enabled by default
+• You can control these behaviors through natural language commands
+• For precise positioning, consider disabling auto-adjustment
+• For overlapping layouts, disable overlap prevention
 
 Type 'quit' to exit the chatbot.
         """
@@ -581,18 +674,7 @@ Type 'quit' to exit the chatbot.
                         self.show_help()
                         continue
                     
-                    # Handle limit adjustment command
-                    if user_input.lower().startswith('set limit '):
-                        try:
-                            new_limit = int(user_input.split()[-1])
-                            if 1 <= new_limit <= 50:
-                                self.max_function_calls_per_turn = new_limit
-                                print(f"✅ Function call limit set to {new_limit}")
-                            else:
-                                print("❌ Limit must be between 1 and 50")
-                        except ValueError:
-                            print("❌ Invalid limit. Use: 'set limit 15'")
-                        continue
+
                     
                     print("🤖 Assistant: ", end="", flush=True)
                     response = self.process_user_message(user_input)
@@ -629,4 +711,4 @@ def main():
     chatbot.run()
 
 if __name__ == "__main__":
-    main() 
+    main()
