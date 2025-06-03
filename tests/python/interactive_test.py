@@ -24,16 +24,17 @@ class InteractiveCanvasTester:
         print("5. 🗑️  Delete Container")
         print("6. 🧹 Clear All Containers")
         print("7. 📸 Take Screenshot")
-        print("8. 🎪 Run Full Demo")
-        print("9. 🔄 Restart Browser")
-        print("10. ❓ Help & Instructions")
+        print("8. 📐 Edit Canvas Size")
+        print("9. 🎪 Run Full Demo")
+        print("10. 🔄 Restart Browser")
+        print("11. ❓ Help & Instructions")
         print("0. 🚪 Exit")
         print("="*60)
     
     def get_user_choice(self):
         """Get and validate user menu choice"""
         try:
-            choice = input("Enter your choice (0-10): ").strip()
+            choice = input("Enter your choice (0-11): ").strip()
             return int(choice) if choice.isdigit() else -1
         except (ValueError, KeyboardInterrupt):
             return -1
@@ -101,9 +102,11 @@ class InteractiveCanvasTester:
                 print("❌ Container ID cannot be empty.")
                 return
             
-            print("Enter position and size (canvas is 800x600):")
-            x = int(input("X position (0-800): "))
-            y = int(input("Y position (0-600): "))
+            # Get current canvas size
+            canvas_size = self.get_canvas_size()
+            print(f"Enter position and size (canvas is {canvas_size['width']}x{canvas_size['height']}):")
+            x = int(input(f"X position (0-{canvas_size['width']}): "))
+            y = int(input(f"Y position (0-{canvas_size['height']}): "))
             width = int(input("Width (pixels): "))
             height = int(input("Height (pixels): "))
             
@@ -286,6 +289,145 @@ class InteractiveCanvasTester:
         except Exception as e:
             print(f"❌ Error taking screenshot: {e}")
     
+    def get_canvas_size(self):
+        """Get current canvas size from frontend"""
+        if not self.controller:
+            return {"width": 800, "height": 600}  # Default size
+        
+        try:
+            size = self.controller.driver.execute_script("""
+                const canvas = document.getElementById('canvas');
+                return {
+                    width: canvas.offsetWidth,
+                    height: canvas.offsetHeight
+                };
+            """)
+            return size
+        except:
+            return {"width": 800, "height": 600}  # Fallback
+    
+    def edit_canvas_size(self):
+        """Interactive canvas size editing"""
+        print("\n📐 Edit Canvas Size")
+        
+        if not self.initialize_browser():
+            return
+        
+        try:
+            # Show current size
+            current_size = self.get_canvas_size()
+            print(f"Current canvas size: {current_size['width']}x{current_size['height']} pixels")
+            
+            # Get new size from user
+            print("\nEnter new canvas dimensions:")
+            new_width = int(input(f"New width (current: {current_size['width']}): "))
+            new_height = int(input(f"New height (current: {current_size['height']}): "))
+            
+            # Validate inputs
+            if new_width <= 0 or new_height <= 0:
+                print("❌ Canvas dimensions must be positive numbers.")
+                return
+            
+            if new_width < 200 or new_height < 200:
+                print("❌ Canvas dimensions should be at least 200x200 pixels for usability.")
+                return
+            
+            if new_width > 2000 or new_height > 2000:
+                print("❌ Canvas dimensions should not exceed 2000x2000 pixels.")
+                return
+            
+            # Confirm change
+            print(f"\nChanging canvas size from {current_size['width']}x{current_size['height']} to {new_width}x{new_height}")
+            confirm = input("Continue? (y/N): ").strip().lower()
+            
+            if confirm != 'y':
+                print("❌ Canvas size change cancelled.")
+                return
+            
+            # Apply new size
+            success = self.controller.driver.execute_script(f"""
+                const canvas = document.getElementById('canvas');
+                canvas.style.width = '{new_width}px';
+                canvas.style.height = '{new_height}px';
+                
+                // Update any containers that might be outside new bounds
+                const containers = document.querySelectorAll('.container');
+                let adjustedCount = 0;
+                
+                containers.forEach(container => {{
+                    const rect = container.getBoundingClientRect();
+                    const canvasRect = canvas.getBoundingClientRect();
+                    
+                    let left = parseInt(container.style.left) || 0;
+                    let top = parseInt(container.style.top) || 0;
+                    let width = parseInt(container.style.width) || 100;
+                    let height = parseInt(container.style.height) || 100;
+                    
+                    let adjusted = false;
+                    
+                    // Adjust if container extends beyond new canvas bounds
+                    if (left + width > {new_width}) {{
+                        if (width <= {new_width}) {{
+                            left = {new_width} - width;
+                        }} else {{
+                            left = 0;
+                            width = {new_width};
+                        }}
+                        adjusted = true;
+                    }}
+                    
+                    if (top + height > {new_height}) {{
+                        if (height <= {new_height}) {{
+                            top = {new_height} - height;
+                        }} else {{
+                            top = 0;
+                            height = {new_height};
+                        }}
+                        adjusted = true;
+                    }}
+                    
+                    if (adjusted) {{
+                        container.style.left = left + 'px';
+                        container.style.top = top + 'px';
+                        container.style.width = width + 'px';
+                        container.style.height = height + 'px';
+                        
+                        // Update stored data
+                        const containerId = container.id;
+                        if (window.canvasState.containers.has(containerId)) {{
+                            const containerData = window.canvasState.containers.get(containerId);
+                            containerData.x = left;
+                            containerData.y = top;
+                            containerData.width = width;
+                            containerData.height = height;
+                        }}
+                        
+                        adjustedCount++;
+                    }}
+                }});
+                
+                // Update state display
+                if (typeof updateStateDisplay === 'function') {{
+                    updateStateDisplay();
+                }}
+                
+                return adjustedCount;
+            """)
+            
+            print(f"✅ Canvas size changed to {new_width}x{new_height} pixels!")
+            
+            if success > 0:
+                print(f"📦 Adjusted {success} container(s) to fit within new canvas bounds.")
+            
+            # Show updated state
+            print("\nUpdated canvas state:")
+            self.view_canvas_state()
+            
+        except ValueError:
+            print("❌ Invalid input. Please enter numeric values for dimensions.")
+        except Exception as e:
+            print(f"❌ Error changing canvas size: {e}")
+    
     def run_full_demo(self):
         """Run the full demo"""
         print("\n🎪 Running Full Demo")
@@ -351,7 +493,8 @@ class InteractiveCanvasTester:
         print("\n❓ Help & Instructions")
         print("="*50)
         print("🎯 Canvas Specifications:")
-        print("   - Size: 800x600 pixels")
+        print("   - Default size: 800x600 pixels (customizable)")
+        print("   - Size range: 200x200 to 2000x2000 pixels")
         print("   - Coordinate system: Top-left origin (0,0)")
         print("   - Containers can be positioned anywhere within bounds")
         print()
@@ -360,6 +503,11 @@ class InteractiveCanvasTester:
         print("   - Modify: Change position and size of existing containers")
         print("   - Delete: Remove containers by ID")
         print("   - State: View all containers and their properties")
+        print()
+        print("📐 Canvas Operations:")
+        print("   - Resize: Change canvas dimensions dynamically")
+        print("   - Auto-adjust: Containers are repositioned if they exceed new bounds")
+        print("   - Validation: Size limits prevent unusable dimensions")
         print()
         print("📸 Screenshots:")
         print("   - Saved in 'screenshots/' directory")
@@ -405,13 +553,15 @@ class InteractiveCanvasTester:
                 elif choice == 7:
                     self.take_screenshot()
                 elif choice == 8:
-                    self.run_full_demo()
+                    self.edit_canvas_size()
                 elif choice == 9:
-                    self.restart_browser()
+                    self.run_full_demo()
                 elif choice == 10:
+                    self.restart_browser()
+                elif choice == 11:
                     self.show_help()
                 else:
-                    print("❌ Invalid choice. Please enter a number between 0-10.")
+                    print("❌ Invalid choice. Please enter a number between 0-11.")
                 
                 if self.running and choice != 0:
                     input("\nPress Enter to continue...")
