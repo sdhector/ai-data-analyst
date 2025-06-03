@@ -9,6 +9,7 @@ import os
 import sys
 import argparse
 from pathlib import Path
+import logging
 
 # Add the project root to Python path
 project_root = Path(__file__).parent
@@ -19,6 +20,17 @@ from adapters.web_adapter.web_server import run_server
 
 def main():
     """Main function to start the AI Data Analyst application"""
+    # Configure basic logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler()  # Log to console
+        ]
+    )
+
+    logger = logging.getLogger(__name__) # Get a logger for main.py
+
     parser = argparse.ArgumentParser(description="AI Data Analyst - Modern Web Application")
     parser.add_argument(
         "--host",
@@ -40,18 +52,18 @@ def main():
     
     args = parser.parse_args()
     
-    # Print startup information
-    print("\n" + "="*60)
-    print("🤖 AI Data Analyst - Modern Web Application")
-    print("="*60)
-    print(f"\n📍 Server will run at: http://{args.host}:{args.port}")
-    print("\n🔧 Features:")
-    print("  • Dynamic 6x6 grid system")
-    print("  • Natural language data analysis")
-    print("  • Real-time visualizations")
-    print("  • WebSocket communication")
-    print("\n⚡ Press Ctrl+C to stop the server")
-    print("="*60 + "\n")
+    # Log startup information
+    logger.info("============================================================")
+    logger.info("🤖 AI Data Analyst - Modern Web Application")
+    logger.info("============================================================")
+    logger.info(f"Server will run at: http://{args.host}:{args.port}")
+    logger.info("Features:")
+    logger.info("  • Dynamic 6x6 grid system")
+    logger.info("  • Natural language data analysis")
+    logger.info("  • Real-time visualizations")
+    logger.info("  • WebSocket communication")
+    logger.info("Press Ctrl+C to stop the server")
+    logger.info("============================================================")
     
     # Open browser if requested
     if args.open_browser:
@@ -68,17 +80,16 @@ def main():
     # Check for API key
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        print("⚠️  WARNING: OPENAI_API_KEY not found in environment variables!")
-        print("   Please set it in your .env file or environment variables.")
-        print("")
+        logger.warning("OPENAI_API_KEY not found in environment variables!")
+        logger.warning("Please set it in your .env file or environment variables.")
     
     # Run the server
     try:
         run_server(host=args.host, port=args.port)
     except KeyboardInterrupt:
-        print("\n\n👋 Shutting down AI Data Analyst...")
+        logger.info("\n\n👋 Shutting down AI Data Analyst...")
     except Exception as e:
-        print(f"\n❌ Error starting server: {e}")
+        logger.error(f"Error starting server: {e}", exc_info=True)
         sys.exit(1)
 
 

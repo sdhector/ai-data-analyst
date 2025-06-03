@@ -14,6 +14,7 @@ import asyncio
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pathlib import Path
+import logging
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -75,6 +76,9 @@ app.add_middleware(
 ai_orchestrator: Optional[AIOrchestrator] = None
 active_websockets: List[WebSocket] = []
 
+# Setup logger
+logger = logging.getLogger(__name__)
+
 
 # Initialize AI Orchestrator
 async def init_ai_orchestrator():
@@ -84,10 +88,10 @@ async def init_ai_orchestrator():
     if ai_orchestrator is None:
         try:
             ai_orchestrator = AIOrchestrator()
-            print("✅ AI Orchestrator initialized successfully")
+            logger.info("AI Orchestrator initialized successfully.")
             return True
         except Exception as e:
-            print(f"❌ Failed to initialize AI Orchestrator: {e}")
+            logger.error(f"Failed to initialize AI Orchestrator: {e}", exc_info=True)
             return False
     return True
 
@@ -158,6 +162,7 @@ async def chat_endpoint(request: ChatMessage):
         )
     
     try:
+        logger.info(f"Processing WebSocket chat message for conversation_id: {conversation_id}")
         # Process the message
         response = ai_orchestrator.process_request(
             user_message=request.message,
@@ -189,7 +194,7 @@ async def chat_endpoint(request: ChatMessage):
         )
         
     except Exception as e:
-        print(f"Error in chat endpoint: {e}")
+        logger.error(f"Error in chat endpoint for conversation_id '{request.conversation_id}': {e}", exc_info=True)
         return ChatResponse(
             status="error",
             message="",
@@ -258,6 +263,7 @@ async def websocket_endpoint(websocket: WebSocket):
     """Handle WebSocket connections"""
     await websocket.accept()
     active_websockets.append(websocket)
+    logger.info(f"WebSocket client connected: {websocket.client}")
     
     # Initialize AI if needed
     if not ai_orchestrator:
@@ -267,7 +273,11 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             # Receive message
             data = await websocket.receive_text()
-            message = json.loads(data)
+            try:
+                message = json.loads(data)
+            except json.JSONDecodeError as jde:
+                logger.warning(f"Failed to decode WebSocket JSON message from {websocket.client}. Data: '{data}'. Error: {jde}", exc_info=True)
+                continue # Skip processing this message
             
             # Handle different message types
             if message["type"] == "handshake":
@@ -318,9 +328,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 
     except WebSocketDisconnect:
         active_websockets.remove(websocket)
-        print("WebSocket client disconnected")
+        logger.info(f"WebSocket client disconnected: {websocket.client}")
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        logger.error(f"WebSocket error for client {websocket.client}: {e}", exc_info=True)
         if websocket in active_websockets:
             active_websockets.remove(websocket)
 
@@ -365,7 +375,7 @@ async def process_chat_message(message: str, conversation_id: Optional[str] = No
         }
         
     except Exception as e:
-        print(f"Error processing chat message: {e}")
+        logger.error(f"Error processing WebSocket chat message for conversation_id '{conversation_id}': {e}", exc_info=True)
         return {
             "status": "error",
             "error": str(e)
@@ -387,22 +397,23 @@ async def broadcast_message(message: Dict[str, Any], exclude: Optional[WebSocket
     for ws in disconnected:
         if ws in active_websockets:
             active_websockets.remove(ws)
+            logger.warning(f"Removed disconnected client {ws.client} during broadcast attempt.")
 
 
 # Startup event
 @app.on_event("startup")
 async def startup_event():
     """Initialize the application on startup"""
-    print("🚀 Starting AI Data Analyst Web Server...")
+    logger.info("Starting AI Data Analyst Web Server...")
     await init_ai_orchestrator()
-    print("✅ Web server ready!")
+    logger.info("Web server ready!")
 
 
 # Shutdown event
 @app.on_event("shutdown")
 async def shutdown_event():
     """Clean up on shutdown"""
-    print("🛑 Shutting down web server...")
+    logger.info("Shutting down web server...")
     # Close all WebSocket connections
     for ws in active_websockets:
         try:

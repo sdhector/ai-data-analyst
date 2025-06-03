@@ -5,12 +5,12 @@ import json
 import sys
 
 # Adjust sys.path to allow importing from the 'core' directory
-sys.path.insert(0, '.') 
-sys.path.insert(0, '../..') 
+sys.path.insert(0, '.')
+sys.path.insert(0, '../..')
 
 from core.function_registry import visualization_functions
 # Import data_analysis_functions to patch its _current_dataset
-from core.function_registry import data_analysis_functions 
+from core.function_registry import data_analysis_functions
 
 class TestVisualizationFunctions(unittest.TestCase):
 
@@ -28,10 +28,10 @@ class TestVisualizationFunctions(unittest.TestCase):
         sample_data = {
             'category': np.array(['A', 'B', 'A', 'C', 'B']),
             'value': np.array([10, 20, 15, 5, 25], dtype=np.int64),
-            'extra_numeric': np.array([1.1, 2.2, 3.3, 4.4, 5.5], dtype=np.float64) 
+            'extra_numeric': np.array([1.1, 2.2, 3.3, 4.4, 5.5], dtype=np.float64)
         }
         sample_df = pd.DataFrame(sample_data)
-        
+
         # Patch _current_dataset in data_analysis_functions
         data_analysis_functions._current_dataset = sample_df
 
@@ -43,14 +43,14 @@ class TestVisualizationFunctions(unittest.TestCase):
                 title='Test Bar Chart Serialization'
             )
 
-            self.assertEqual(chart_output['status'], 'success', 
+            self.assertEqual(chart_output['status'], 'success',
                              f"Chart creation failed: {chart_output.get('error')}")
 
             chart_config = chart_output['result']['chart_config']
 
             # Attempt to serialize the chart_config to JSON
             json_string = json.dumps(chart_config)
-            
+
             self.assertTrue(True, "JSON serialization succeeded.")
 
         finally:

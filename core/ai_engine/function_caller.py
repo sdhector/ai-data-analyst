@@ -7,8 +7,11 @@ It integrates with the function registry and handles automatic container managem
 
 import json
 from typing import Dict, Any, List, Optional
+import logging
 from ..function_registry import FunctionExecutor, AVAILABLE_FUNCTIONS, FUNCTION_SCHEMAS
 from ..function_registry.grid_management_functions import add_container, update_container_content
+
+logger = logging.getLogger(__name__)
 
 class FunctionCaller:
     """
@@ -51,11 +54,12 @@ class FunctionCaller:
             return result
             
         except Exception as e:
+            logger.error(f"Error in function caller for '{function_name}' with args '{arguments}': {e}", exc_info=True)
             return {
                 "status": "error",
-                "error": f"Error in function caller: {str(e)}",
+                "error": f"Error in function caller: {str(e)}", # User-facing
                 "function_name": function_name,
-                "arguments": arguments
+                "arguments": arguments # Be cautious if arguments can be very large or sensitive
             }
     
     def execute_multiple_functions(self, function_calls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -172,10 +176,14 @@ class FunctionCaller:
             return result
             
         except Exception as e:
+            logger.warning(
+                f"Failed to update container for function '{function_name}' and container_id '{container_id}'. Error: {e}",
+                exc_info=True
+            )
             # Don't fail the main function if container update fails
             result["container_update"] = {
                 "status": "error",
-                "error": f"Failed to update container: {str(e)}"
+                "error": f"Failed to update container: {str(e)}" # User-facing
             }
             return result
     
@@ -260,9 +268,10 @@ class FunctionCaller:
             }
             
         except Exception as e:
+            logger.error(f"Error during function call validation for '{function_name}': {e}", exc_info=True)
             return {
                 "status": "error",
-                "error": f"Validation error: {str(e)}",
+                "error": f"Validation error: {str(e)}", # User-facing
                 "function_name": function_name
             }
     
@@ -314,7 +323,8 @@ class FunctionCaller:
                 }
                 
         except Exception as e:
+            logger.error(f"Error getting function help for '{function_name if function_name else 'all functions'}': {e}", exc_info=True)
             return {
                 "status": "error",
-                "error": f"Error getting function help: {str(e)}"
+                "error": f"Error getting function help: {str(e)}" # User-facing
             } 

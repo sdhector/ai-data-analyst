@@ -7,9 +7,12 @@ and provides the primary interface for the AI Data Analyst application.
 
 import json
 from typing import Dict, Any, List, Optional
+import logging
 from .llm_client import LLMClient
 from .conversation_manager import ConversationManager
 from .function_caller import FunctionCaller
+
+logger = logging.getLogger(__name__)
 
 class AIOrchestrator:
     """
@@ -106,9 +109,10 @@ class AIOrchestrator:
             return response
             
         except Exception as e:
+            logger.error(f"Error processing request for conversation_id '{conversation_id}': {e}", exc_info=True)
             return {
                 "status": "error",
-                "error": f"Error processing request: {str(e)}",
+                "error": f"Error processing request: {str(e)}", # Keep user-facing error simple
                 "conversation_id": conversation_id,
                 "user_message": user_message
             }
@@ -157,10 +161,14 @@ class AIOrchestrator:
                     # Parse function arguments
                     function_args = json.loads(function_call.arguments)
                 except json.JSONDecodeError as e:
+                    logger.error(
+                        f"Invalid function arguments JSON for function '{function_name}' in conversation '{conversation_id}'. Arguments: {function_call.arguments}. Error: {e}",
+                        exc_info=True
+                    )
                     return {
                         "status": "error",
-                        "error": f"Invalid function arguments JSON: {str(e)}",
-                        "function_call": function_call,
+                        "error": f"Invalid function arguments JSON: {str(e)}", # User-facing
+                        "function_name": function_name,
                         "conversation_id": conversation_id
                     }
                 
@@ -336,9 +344,10 @@ class AIOrchestrator:
             }
             
         except Exception as e:
+            logger.error(f"Error getting conversation history for conversation_id '{conversation_id}': {e}", exc_info=True)
             return {
                 "status": "error",
-                "error": f"Error getting conversation history: {str(e)}",
+                "error": f"Error getting conversation history: {str(e)}", # User-facing
                 "conversation_id": conversation_id
             }
     
@@ -395,9 +404,10 @@ class AIOrchestrator:
             }
             
         except Exception as e:
+            logger.error(f"Error getting system status: {e}", exc_info=True)
             return {
                 "status": "error",
-                "error": f"Error getting system status: {str(e)}"
+                "error": f"Error getting system status: {str(e)}" # User-facing
             }
     
     def get_available_functions(self) -> Dict[str, Any]:

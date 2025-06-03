@@ -7,6 +7,10 @@ including adding, removing, and organizing containers in a flexible 6x6 grid.
 
 from typing import Dict, Any, List, Optional, Tuple
 import uuid
+import logging
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 # Global grid state (in production, this would be managed by a proper state manager)
 _grid_containers = {}
@@ -112,6 +116,8 @@ def add_container(position: str = None,
         }
         
     except Exception as e:
+        log_args = f"position='{position}', start_row={start_row}, start_col={start_col}, end_row={end_row}, end_col={end_col}, title='{title}'"
+        logger.error(f"Error adding container with args ({log_args}): {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error adding container: {str(e)}",
@@ -163,6 +169,7 @@ def remove_container(container_id: str) -> Dict[str, Any]:
         }
         
     except Exception as e:
+        logger.error(f"Error removing container '{container_id}': {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error removing container: {str(e)}",
@@ -199,6 +206,7 @@ def clear_grid() -> Dict[str, Any]:
         }
         
     except Exception as e:
+        logger.error(f"Error clearing grid: {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error clearing grid: {str(e)}",
@@ -297,6 +305,8 @@ def move_container(container_id: str,
         }
         
     except Exception as e:
+        log_args = f"container_id='{container_id}', position='{position}', start_row={start_row}, start_col={start_col}, end_row={end_row}, end_col={end_col}"
+        logger.error(f"Error moving container with args ({log_args}): {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error moving container: {str(e)}",
@@ -392,6 +402,8 @@ def resize_container(container_id: str,
         }
         
     except Exception as e:
+        log_args = f"container_id='{container_id}', width={width}, height={height}, end_row={end_row}, end_col={end_col}"
+        logger.error(f"Error resizing container with args ({log_args}): {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error resizing container: {str(e)}",
@@ -445,6 +457,7 @@ def get_grid_status() -> Dict[str, Any]:
         }
         
     except Exception as e:
+        logger.error(f"Error getting grid status: {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error getting grid status: {str(e)}",
@@ -503,6 +516,7 @@ def update_container_content(container_id: str, content: Dict[str, Any],
         }
         
     except Exception as e:
+        logger.error(f"Error updating container content for container_id='{container_id}', content_type='{content_type}', title='{title}': {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error updating container content: {str(e)}",

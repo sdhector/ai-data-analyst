@@ -11,6 +11,10 @@ from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 import openai
 from openai import OpenAI
+import logging
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -110,12 +114,33 @@ class LLMClient:
             return result
             
         except Exception as e:
-            return {
+            logger.error(
+                f"LLM chat completion failed for model {self.model}. Error: {str(e)}",
+                exc_info=True
+            )
+            error_payload = {
                 "status": "error",
                 "error": str(e),
                 "error_type": type(e).__name__,
                 "model": self.model
             }
+            if isinstance(e, openai.APIError):
+                if hasattr(e, 'http_status'): # For older versions of openai client, it might be e.status_code
+                    error_payload["http_status"] = e.http_status
+                elif hasattr(e, 'status_code'): # Fallback for some versions
+                     error_payload["http_status"] = e.status_code
+                if hasattr(e, 'code'):
+                    error_payload["code"] = e.code
+                if hasattr(e, 'param'):
+                    error_payload["param"] = e.param
+                # For openai client v1.x.x, request_id is typically on the response headers,
+                # but some error objects might carry it directly or through the response attribute.
+                if hasattr(e, 'request_id'): # Direct attribute first
+                     error_payload["request_id"] = e.request_id
+                elif hasattr(e, 'response') and hasattr(e.response, 'headers'):
+                    error_payload["request_id"] = e.response.headers.get("x-request-id")
+
+            return error_payload
     
     def _make_request_with_retry(self, request_params: Dict[str, Any]):
         """
@@ -134,24 +159,20 @@ class LLMClient:
                 response = self.client.chat.completions.create(**request_params)
                 return response
                 
-            except openai.RateLimitError as e:
+            except (openai.RateLimitError, openai.APITimeoutError, openai.APIConnectionError, openai.APIError) as e:
                 last_error = e
                 if attempt < self.max_retries - 1:
                     wait_time = self.retry_delay * (2 ** attempt)  # Exponential backoff
-                    print(f"Rate limit hit. Waiting {wait_time} seconds before retry {attempt + 1}/{self.max_retries}")
+                    error_type = type(e).__name__
+                    logger.warning(
+                        f"{error_type} encountered. Waiting {wait_time:.2f}s "
+                        f"before retry {attempt + 1}/{self.max_retries}. Error: {e}"
+                    )
                     time.sleep(wait_time)
                     continue
-                    
-            except openai.APIError as e:
-                last_error = e
-                if attempt < self.max_retries - 1:
-                    wait_time = self.retry_delay * (2 ** attempt)
-                    print(f"API error. Waiting {wait_time} seconds before retry {attempt + 1}/{self.max_retries}")
-                    time.sleep(wait_time)
-                    continue
-                    
-            except Exception as e:
-                # For other errors, don't retry
+
+            except Exception as e: # Catch any other exception that is not an OpenAI specific retryable error
+                # For other errors, don't retry, raise immediately
                 raise e
         
         # If we get here, all retries failed

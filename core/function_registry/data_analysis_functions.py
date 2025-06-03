@@ -10,6 +10,10 @@ import numpy as np
 from typing import Dict, Any, List, Union
 import json
 from datetime import datetime
+import logging
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 # Global data storage (in production, this would be managed by a proper data manager)
 _current_dataset = None
@@ -133,6 +137,7 @@ def load_sample_data(dataset_name: str) -> Dict[str, Any]:
         }
         
     except Exception as e:
+        logger.error(f"Error loading sample dataset '{dataset_name}': {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error loading dataset: {str(e)}",
@@ -167,6 +172,7 @@ def get_current_data_info() -> Dict[str, Any]:
         }
         
     except Exception as e:
+        logger.error(f"Error getting current data info: {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error getting data info: {str(e)}",
@@ -201,7 +207,36 @@ def filter_data(column: str, operator: str, value: Union[str, int, float]) -> Di
                 "available_columns": _current_dataset.columns.tolist()
             }
         
-        # Apply filter based on operator
+        original_value = value # Keep original value for messages/reporting
+
+        # Type checking and conversion for comparison operators
+        if operator in ['>', '<', '>=', '<=']:
+            if pd.api.types.is_numeric_dtype(_current_dataset[column].dtype):
+                try:
+                    value = float(value)
+                except ValueError:
+                    return {
+                        "status": "error",
+                        "error": f"Value '{original_value}' is not a valid number for comparison with numeric column '{column}'.",
+                        "function_name": "filter_data"
+                    }
+            elif pd.api.types.is_datetime64_any_dtype(_current_dataset[column].dtype):
+                try:
+                    # Convert the filter value to datetime
+                    # Assumes the column itself is already of a consistent datetime type if dtype is datetime64_any
+                    value = pd.to_datetime(value)
+                except (ValueError, TypeError) as e: # pd.to_datetime can raise TypeError for incompatible types like int
+                    return {
+                        "status": "error",
+                        "error": f"Value '{original_value}' is not a valid date/time format for comparison with datetime column '{column}'. Original error: {str(e)}",
+                        "function_name": "filter_data"
+                    }
+            # If column is neither numeric nor datetime, let Pandas attempt comparison for other types (e.g., strings).
+            # Pandas will raise a TypeError if the comparison is not possible (e.g., string > int),
+            # which will be caught by the generic try-except block at the end of the function.
+            # More specific handling for other types could be added here if needed.
+
+        # Apply filter based on operator (now using potentially converted 'value')
         if operator == '==':
             filtered_data = _current_dataset[_current_dataset[column] == value]
         elif operator == '!=':
@@ -247,6 +282,7 @@ def filter_data(column: str, operator: str, value: Union[str, int, float]) -> Di
         }
         
     except Exception as e:
+        logger.error(f"Error filtering data for column '{column}' with operator '{operator}' and value '{original_value}': {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error filtering data: {str(e)}",
@@ -316,6 +352,7 @@ def group_data(column: str, aggregation: str) -> Dict[str, Any]:
         }
         
     except Exception as e:
+        logger.error(f"Error grouping data by column '{column}' with aggregation '{aggregation}': {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error grouping data: {str(e)}",
@@ -367,6 +404,7 @@ def sort_data(column: str, ascending: bool = True) -> Dict[str, Any]:
         }
         
     except Exception as e:
+        logger.error(f"Error sorting data by column '{column}' (ascending={ascending}): {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error sorting data: {str(e)}",
@@ -418,7 +456,8 @@ def calculate_statistics(columns: List[str] = None) -> Dict[str, Any]:
         # Convert to a more readable format
         statistics = {}
         for column in columns:
-            if _current_dataset[column].dtype in [np.number, 'int64', 'float64']:
+            # Check if the column is numeric before attempting to access numeric-specific stats
+            if pd.api.types.is_numeric_dtype(_current_dataset[column]):
                 statistics[column] = {
                     "count": int(stats_data.loc['count', column]),
                     "mean": float(stats_data.loc['mean', column]),
@@ -444,6 +483,9 @@ def calculate_statistics(columns: List[str] = None) -> Dict[str, Any]:
         }
         
     except Exception as e:
+        # Convert columns list to string for logging, handle None case
+        columns_str = str(columns) if columns is not None else "all numeric"
+        logger.error(f"Error calculating statistics for columns '{columns_str}': {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error calculating statistics: {str(e)}",
@@ -486,6 +528,7 @@ def get_data_sample(n_rows: int = 10) -> Dict[str, Any]:
         }
         
     except Exception as e:
+        logger.error(f"Error getting data sample of {n_rows} rows: {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error getting data sample: {str(e)}",

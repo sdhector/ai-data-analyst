@@ -10,6 +10,10 @@ import plotly.express as px
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, List, Union
+import logging
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 def _serialize_dataframe_for_table(df: pd.DataFrame) -> List[Dict]:
     """
@@ -50,10 +54,10 @@ def _serialize_dataframe_for_table(df: pd.DataFrame) -> List[Dict]:
 def _convert_numpy_to_list_recursive(item: Any) -> Any:
     """
     Recursively convert numpy arrays to lists within nested data structures.
-    
+
     Args:
         item: The item to process.
-        
+
     Returns:
         The processed item with numpy arrays converted to lists.
     """
@@ -136,6 +140,7 @@ def create_line_chart(container_id: str, x_col: str, y_col: str, title: str = ""
         }
         
     except Exception as e:
+        logger.error(f"Error creating line chart for x_col='{x_col}', y_col='{y_col}', color_col='{color_col}': {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error creating line chart: {str(e)}",
@@ -212,6 +217,7 @@ def create_bar_chart(container_id: str, x_col: str, y_col: str, title: str = "",
         }
         
     except Exception as e:
+        logger.error(f"Error creating bar chart for x_col='{x_col}', y_col='{y_col}', color_col='{color_col}': {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error creating bar chart: {str(e)}",
@@ -289,6 +295,7 @@ def create_scatter_plot(container_id: str, x_col: str, y_col: str, title: str = 
         }
         
     except Exception as e:
+        logger.error(f"Error creating scatter plot for x_col='{x_col}', y_col='{y_col}', color_col='{color_col}', size_col='{size_col}': {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error creating scatter plot: {str(e)}",
@@ -360,6 +367,7 @@ def create_histogram(container_id: str, column: str, bins: int = 20, title: str 
         }
         
     except Exception as e:
+        logger.error(f"Error creating histogram for column='{column}', bins={bins}: {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error creating histogram: {str(e)}",
@@ -422,6 +430,8 @@ def create_data_table(container_id: str, columns: List[str] = None, max_rows: in
         }
         
     except Exception as e:
+        columns_str = str(columns) if columns is not None else "all"
+        logger.error(f"Error creating data table for columns='{columns_str}', max_rows={max_rows}: {e}", exc_info=True)
         return {
             "status": "error",
             "error": f"Error creating data table: {str(e)}",

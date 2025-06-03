@@ -9,6 +9,10 @@ import json
 from typing import Dict, Any, Callable, List
 from dotenv import load_dotenv
 import os
+import logging
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -42,7 +46,7 @@ class FunctionExecutor:
         Returns:
             Result of function execution
         """
-        print(f"🔧 EXECUTING: {function_name}({arguments})")
+        logger.info(f"Executing function: {function_name} with arguments: {arguments}")
         
         # Check if function exists
         if function_name not in self.function_registry:
@@ -59,17 +63,22 @@ class FunctionExecutor:
             # Execute it with LLM-provided arguments (the other magic line!)
             result = function_to_call(**arguments)
             
-            print(f"✅ RESULT: {result}")
+            logger.info(f"Function {function_name} executed successfully. Result: {result}")
             return result
             
         except Exception as e:
+            # Log the error with stack trace
+            logger.error(
+                f"Error executing function '{function_name}' with arguments '{arguments}'. Error: {e}",
+                exc_info=True
+            )
+            # The error_result dictionary is for the caller, ensure it's constructed and returned
             error_result = {
-                "error": f"Error executing {function_name}: {str(e)}",
+                "error": f"Error executing {function_name}: {str(e)}", # User-facing error
                 "function_name": function_name,
-                "arguments": arguments,
+                "arguments": arguments, # Be cautious with sensitive/large args in returned payload
                 "status": "error"
             }
-            print(f"❌ ERROR: {error_result}")
             return error_result
     
     def get_available_functions(self) -> List[str]:
@@ -121,8 +130,7 @@ class LLMFunctionCaller:
         Returns:
             Dictionary with response and any function results
         """
-        print(f"👤 USER: {user_message}")
-        print("=" * 60)
+        logger.info(f"User message: {user_message}")
         
         # Build conversation with history
         messages = [
@@ -153,7 +161,7 @@ Always be helpful and explain what you're doing."""
         })
         
         # Send to LLM with available functions
-        print("📤 SENDING TO LLM...")
+        logger.info("Sending request to LLM...")
         response = self.client.chat.completions.create(
             model=model,
             messages=messages,
@@ -166,14 +174,14 @@ Always be helpful and explain what you're doing."""
         
         # Check if LLM wants to call a function
         if assistant_message.function_call:
-            print("🎯 LLM WANTS TO CALL A FUNCTION!")
+            logger.info("LLM requested a function call.")
             
             # Extract function call details
             function_name = assistant_message.function_call.name
             function_args = json.loads(assistant_message.function_call.arguments)
             
-            print(f"📋 FUNCTION: {function_name}")
-            print(f"📋 ARGUMENTS: {function_args}")
+            logger.info(f"Function to call: {function_name}")
+            logger.info(f"Function arguments: {function_args}")
             
             # Execute the function using our generic executor!
             function_result = self.executor.execute_function_call(function_name, function_args)
@@ -192,14 +200,14 @@ Always be helpful and explain what you're doing."""
             })
             
             # Get final response from LLM
-            print("📤 SENDING RESULT BACK TO LLM...")
+            logger.info("Sending function result back to LLM...")
             final_response = self.client.chat.completions.create(
                 model=model,
                 messages=messages
             )
             
             final_answer = final_response.choices[0].message.content
-            print(f"🤖 FINAL RESPONSE: {final_answer}")
+            logger.info(f"LLM final response: {final_answer}")
             
             return {
                 "response": final_answer,
@@ -211,7 +219,7 @@ Always be helpful and explain what you're doing."""
         else:
             # No function call needed
             direct_answer = assistant_message.content
-            print(f"🤖 DIRECT RESPONSE: {direct_answer}")
+            logger.info(f"LLM direct response: {direct_answer}")
             
             return {
                 "response": direct_answer,
