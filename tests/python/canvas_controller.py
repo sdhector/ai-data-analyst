@@ -159,8 +159,8 @@ class CanvasController:
                 if not overlaps:
                     return x, y
         
-        # If still no position found, return top-left corner (last resort)
-        return 0, 0
+        # If still no position found, return None to indicate no space available
+        return None, None
     
     def get_current_state(self):
         """
@@ -286,11 +286,14 @@ class CanvasController:
                         width, height, canvas_width, canvas_height, existing_containers, x, y
                     )
                     
-                    if new_x != x or new_y != y:
-                        print(f"🔄 Found non-overlapping position: ({x}, {y}) → ({new_x}, {new_y})")
-                        x, y = new_x, new_y
+                    if new_x is not None and new_y is not None:
+                        if new_x != x or new_y != y:
+                            print(f"🔄 Found non-overlapping position: ({x}, {y}) → ({new_x}, {new_y})")
+                            x, y = new_x, new_y
                     else:
-                        print(f"⚠️  Could not find completely non-overlapping position")
+                        print(f"❌ No space available for container of size {width}x{height}")
+                        print(f"❌ Cannot create container without overlapping - rejecting creation")
+                        return False
             elif not avoid_overlap and existing_containers:
                 # Just warn about overlaps
                 overlapping_containers = []
@@ -463,11 +466,14 @@ class CanvasController:
                         width, height, canvas_width, canvas_height, existing_containers, x, y
                     )
                     
-                    if new_x != x or new_y != y:
-                        print(f"🔄 Found non-overlapping position: ({x}, {y}) → ({new_x}, {new_y})")
-                        x, y = new_x, new_y
+                    if new_x is not None and new_y is not None:
+                        if new_x != x or new_y != y:
+                            print(f"🔄 Found non-overlapping position: ({x}, {y}) → ({new_x}, {new_y})")
+                            x, y = new_x, new_y
                     else:
-                        print(f"⚠️  Could not find completely non-overlapping position")
+                        print(f"❌ No space available for container of size {width}x{height}")
+                        print(f"❌ Cannot modify container without overlapping - rejecting modification")
+                        return False
             elif not avoid_overlap and existing_containers:
                 # Just warn about overlaps
                 overlapping_containers = []
