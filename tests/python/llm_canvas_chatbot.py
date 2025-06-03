@@ -484,7 +484,7 @@ class CanvasFunctionExecutor:
             # Recreate the chart (will auto-adapt to container dimensions)
             chart_html = self._create_pie_chart_html(title, labels, values)
             
-            # Update the container content using safer DOM manipulation
+            # Update the container content using bounds enforcement
             success = self.controller.driver.execute_script("""
                 const container = document.getElementById(arguments[0]);
                 if (!container) {
@@ -493,30 +493,67 @@ class CanvasFunctionExecutor:
                 }
                 
                 try {
-                    // Update container styling
-                    container.style.position = 'relative';
+                    // ROBUST BOUNDS ENFORCEMENT FOR REFRESH
+                    
+                    // Store original container properties to prevent movement
+                    const originalLeft = container.style.left;
+                    const originalTop = container.style.top;
+                    const originalWidth = container.style.width;
+                    const originalHeight = container.style.height;
+                    
+                    // Enforce strict container positioning
+                    container.style.position = 'absolute';
                     container.style.overflow = 'hidden';
+                    container.style.contain = 'layout style paint';
                     
                     // Clear existing content
                     container.innerHTML = '';
                     
-                    // Create a temporary div to parse the HTML safely
+                    // Create bounds-enforcing wrapper
+                    const wrapper = document.createElement('div');
+                    wrapper.style.cssText = `
+                        position: relative;
+                        width: 100%;
+                        height: 100%;
+                        overflow: hidden;
+                        box-sizing: border-box;
+                        margin: 0;
+                        padding: 0;
+                        contain: layout style paint;
+                    `;
+                    
+                    // Parse and add content with bounds enforcement
                     const tempDiv = document.createElement('div');
                     tempDiv.innerHTML = arguments[1];
                     
-                    // Move all child nodes from temp div to container
                     while (tempDiv.firstChild) {
-                        container.appendChild(tempDiv.firstChild);
+                        const child = tempDiv.firstChild;
+                        
+                        // Enforce bounds on child elements
+                        if (child.nodeType === Node.ELEMENT_NODE) {
+                            child.style.position = 'relative';
+                            child.style.maxWidth = '100%';
+                            child.style.maxHeight = '100%';
+                            child.style.overflow = 'hidden';
+                            child.style.contain = 'layout style paint';
+                        }
+                        
+                        wrapper.appendChild(child);
                     }
                     
-                    // Update stored dimensions
-                    // Chart dimensions are now auto-adaptive
+                    container.appendChild(wrapper);
                     
-                    console.log('Pie chart refreshed in container:', arguments[0]);
+                    // Re-lock container position and size
+                    container.style.left = originalLeft;
+                    container.style.top = originalTop;
+                    container.style.width = originalWidth;
+                    container.style.height = originalHeight;
+                    
+                    console.log('Pie chart refreshed with bounds enforcement:', arguments[0]);
                     return true;
                     
                 } catch (error) {
-                    console.error('Error refreshing pie chart:', error);
+                    console.error('Error refreshing pie chart with bounds enforcement:', error);
                     return false;
                 }
             """, container_id, chart_html)
@@ -826,48 +863,104 @@ class CanvasFunctionExecutor:
                         }
                         
                         try {
-                            // Ensure container has proper positioning and overflow
-                            container.style.position = 'relative';
-                            container.style.overflow = 'hidden';
+                            // ROBUST CONTAINER BOUNDS ENFORCEMENT
+                            // Ensure container stays fixed and content is strictly contained
                             
-                            // Clear existing content
+                            // 1. Lock container positioning to prevent movement
+                            const containerRect = container.getBoundingClientRect();
+                            const canvas = container.parentElement;
+                            const canvasRect = canvas.getBoundingClientRect();
+                            
+                            // Store original container properties
+                            const originalLeft = container.style.left;
+                            const originalTop = container.style.top;
+                            const originalWidth = container.style.width;
+                            const originalHeight = container.style.height;
+                            
+                            // 2. Enforce strict container positioning and containment
+                            container.style.position = 'absolute';  // Ensure absolute positioning
+                            container.style.overflow = 'hidden';   // Prevent any overflow
+                            container.style.left = originalLeft;   // Lock original position
+                            container.style.top = originalTop;     // Lock original position
+                            container.style.width = originalWidth; // Lock original size
+                            container.style.height = originalHeight; // Lock original size
+                            container.style.zIndex = '1';          // Ensure proper stacking
+                            container.style.contain = 'layout style paint'; // CSS containment
+                            
+                            // 3. Clear existing content
                             container.innerHTML = '';
                             
-                            // Small delay to ensure DOM is ready
-                            setTimeout(() => {}, 10);
+                            // 4. Create a wrapper div that enforces strict bounds
+                            const wrapper = document.createElement('div');
+                            wrapper.style.cssText = `
+                                position: relative;
+                                width: 100%;
+                                height: 100%;
+                                overflow: hidden;
+                                box-sizing: border-box;
+                                margin: 0;
+                                padding: 0;
+                                top: 0;
+                                left: 0;
+                                contain: layout style paint;
+                            `;
                             
-                            // Create a temporary div to parse the HTML safely
+                            // 5. Parse chart HTML safely
                             const tempDiv = document.createElement('div');
                             tempDiv.innerHTML = arguments[1];
                             
                             // Verify the HTML was parsed correctly
                             if (tempDiv.children.length === 0) {
                                 console.error('No child elements found in parsed HTML for container:', arguments[0]);
-                                console.log('HTML content length:', arguments[1].length);
-                                console.log('HTML content preview:', arguments[1].substring(0, 100));
                                 return false;
                             }
                             
-                            // Move all child nodes from temp div to container
+                            // 6. Move chart content into wrapper with strict positioning
                             while (tempDiv.firstChild) {
-                                container.appendChild(tempDiv.firstChild);
+                                const child = tempDiv.firstChild;
+                                
+                                // Ensure child elements cannot escape container bounds
+                                if (child.nodeType === Node.ELEMENT_NODE) {
+                                    child.style.position = 'relative';
+                                    child.style.maxWidth = '100%';
+                                    child.style.maxHeight = '100%';
+                                    child.style.overflow = 'hidden';
+                                    child.style.contain = 'layout style paint';
+                                    
+                                    // Remove any absolute positioning that might break containment
+                                    if (child.style.position === 'absolute' || child.style.position === 'fixed') {
+                                        child.style.position = 'relative';
+                                    }
+                                }
+                                
+                                wrapper.appendChild(child);
                             }
                             
-                            // Verify the content was added
+                            // 7. Add wrapper to container
+                            container.appendChild(wrapper);
+                            
+                            // 8. Final verification and enforcement
                             if (container.children.length === 0) {
                                 console.error('No children added to container after HTML injection:', arguments[0]);
                                 return false;
                             }
                             
-                            // Mark container as having chart content
+                            // 9. Re-enforce container bounds after content addition
+                            container.style.left = originalLeft;   // Re-lock position
+                            container.style.top = originalTop;     // Re-lock position
+                            container.style.width = originalWidth; // Re-lock size
+                            container.style.height = originalHeight; // Re-lock size
+                            
+                            // 10. Mark container as having chart content
                             container.setAttribute('data-content-type', 'pie-chart');
                             container.setAttribute('data-chart-title', arguments[2]);
+                            container.setAttribute('data-bounds-locked', 'true');
                             
-                            console.log('Pie chart successfully injected into container:', arguments[0], 'with', container.children.length, 'child elements');
+                            console.log('Pie chart successfully injected with bounds enforcement:', arguments[0]);
                             return true;
                             
                         } catch (error) {
-                            console.error('Error injecting pie chart:', error);
+                            console.error('Error injecting pie chart with bounds enforcement:', error);
                             return false;
                         }
                     """, container_id, chart_html, title)
