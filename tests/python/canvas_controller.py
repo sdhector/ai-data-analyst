@@ -76,6 +76,20 @@ class CanvasController:
         
         print(f"✅ Frontend loaded: {self.frontend_path}")
     
+    def get_canvas_size(self):
+        """Get current canvas size from frontend"""
+        try:
+            size = self.driver.execute_script("""
+                const canvas = document.getElementById('canvas');
+                return {
+                    width: canvas.offsetWidth,
+                    height: canvas.offsetHeight
+                };
+            """)
+            return size
+        except:
+            return {"width": 800, "height": 600}  # Fallback to default
+    
     def get_current_state(self):
         """
         Get the current state of the canvas
@@ -102,7 +116,7 @@ class CanvasController:
             print(f"❌ Error getting canvas state: {e}")
             return None
     
-    def create_container(self, container_id, x, y, width, height):
+    def create_container(self, container_id, x, y, width, height, auto_adjust=True):
         """
         Create a new container on the canvas
         
@@ -112,6 +126,7 @@ class CanvasController:
             y (int): Y position in pixels  
             width (int): Width in pixels
             height (int): Height in pixels
+            auto_adjust (bool): Whether to automatically adjust position/size to fit canvas
             
         Returns:
             bool: True if successful, False otherwise
@@ -124,9 +139,58 @@ class CanvasController:
             if not all(isinstance(val, (int, float)) and val >= 0 for val in [x, y, width, height]):
                 raise ValueError("Position and size values must be non-negative numbers")
             
-            # Check canvas bounds (800x600)
-            if x + width > 800 or y + height > 600:
-                print(f"⚠️  Warning: Container extends beyond canvas bounds (800x600)")
+            # Get current canvas size
+            canvas_size = self.get_canvas_size()
+            canvas_width = canvas_size.get('width', 800)
+            canvas_height = canvas_size.get('height', 600)
+            
+            # Store original values for reporting
+            original_x, original_y, original_width, original_height = x, y, width, height
+            
+            if auto_adjust:
+                # Auto-adjust to ensure container fits within canvas
+                adjusted = False
+                
+                # Adjust width if too large
+                if width > canvas_width:
+                    width = canvas_width
+                    adjusted = True
+                    print(f"📏 Adjusted width from {original_width} to {width} to fit canvas")
+                
+                # Adjust height if too large
+                if height > canvas_height:
+                    height = canvas_height
+                    adjusted = True
+                    print(f"📏 Adjusted height from {original_height} to {height} to fit canvas")
+                
+                # Adjust X position if container extends beyond right edge
+                if x + width > canvas_width:
+                    x = canvas_width - width
+                    adjusted = True
+                    print(f"📍 Adjusted X position from {original_x} to {x} to fit canvas")
+                
+                # Adjust Y position if container extends beyond bottom edge
+                if y + height > canvas_height:
+                    y = canvas_height - height
+                    adjusted = True
+                    print(f"📍 Adjusted Y position from {original_y} to {y} to fit canvas")
+                
+                # Ensure position is not negative
+                if x < 0:
+                    x = 0
+                    adjusted = True
+                if y < 0:
+                    y = 0
+                    adjusted = True
+                
+                if adjusted:
+                    print(f"🔧 Container auto-adjusted to fit within canvas bounds ({canvas_width}x{canvas_height})")
+            else:
+                # Just warn if container extends beyond bounds
+                if x + width > canvas_width or y + height > canvas_height:
+                    print(f"⚠️  Warning: Container extends beyond canvas bounds ({canvas_width}x{canvas_height})")
+                    print(f"   Container: ({x}, {y}) to ({x + width}, {y + height})")
+                    print(f"   Canvas: (0, 0) to ({canvas_width}, {canvas_height})")
             
             # Execute JavaScript to create container
             result = self.driver.execute_script(
@@ -135,7 +199,10 @@ class CanvasController:
             )
             
             if result:
-                print(f"✅ Container '{container_id}' created at ({x}, {y}) with size {width}x{height}")
+                if auto_adjust and (x != original_x or y != original_y or width != original_width or height != original_height):
+                    print(f"✅ Container '{container_id}' created at ({x}, {y}) with size {width}x{height} (auto-adjusted)")
+                else:
+                    print(f"✅ Container '{container_id}' created at ({x}, {y}) with size {width}x{height}")
             else:
                 print(f"❌ Failed to create container '{container_id}'")
             
@@ -176,7 +243,7 @@ class CanvasController:
             print(f"❌ Error deleting container: {e}")
             return False
     
-    def modify_container(self, container_id, x, y, width, height):
+    def modify_container(self, container_id, x, y, width, height, auto_adjust=True):
         """
         Modify an existing container's position and size
         
@@ -186,6 +253,7 @@ class CanvasController:
             y (int): New Y position in pixels
             width (int): New width in pixels
             height (int): New height in pixels
+            auto_adjust (bool): Whether to automatically adjust position/size to fit canvas
             
         Returns:
             bool: True if successful, False otherwise
@@ -198,9 +266,58 @@ class CanvasController:
             if not all(isinstance(val, (int, float)) and val >= 0 for val in [x, y, width, height]):
                 raise ValueError("Position and size values must be non-negative numbers")
             
-            # Check canvas bounds
-            if x + width > 800 or y + height > 600:
-                print(f"⚠️  Warning: Modified container extends beyond canvas bounds (800x600)")
+            # Get current canvas size
+            canvas_size = self.get_canvas_size()
+            canvas_width = canvas_size.get('width', 800)
+            canvas_height = canvas_size.get('height', 600)
+            
+            # Store original values for reporting
+            original_x, original_y, original_width, original_height = x, y, width, height
+            
+            if auto_adjust:
+                # Auto-adjust to ensure container fits within canvas
+                adjusted = False
+                
+                # Adjust width if too large
+                if width > canvas_width:
+                    width = canvas_width
+                    adjusted = True
+                    print(f"📏 Adjusted width from {original_width} to {width} to fit canvas")
+                
+                # Adjust height if too large
+                if height > canvas_height:
+                    height = canvas_height
+                    adjusted = True
+                    print(f"📏 Adjusted height from {original_height} to {height} to fit canvas")
+                
+                # Adjust X position if container extends beyond right edge
+                if x + width > canvas_width:
+                    x = canvas_width - width
+                    adjusted = True
+                    print(f"📍 Adjusted X position from {original_x} to {x} to fit canvas")
+                
+                # Adjust Y position if container extends beyond bottom edge
+                if y + height > canvas_height:
+                    y = canvas_height - height
+                    adjusted = True
+                    print(f"📍 Adjusted Y position from {original_y} to {y} to fit canvas")
+                
+                # Ensure position is not negative
+                if x < 0:
+                    x = 0
+                    adjusted = True
+                if y < 0:
+                    y = 0
+                    adjusted = True
+                
+                if adjusted:
+                    print(f"🔧 Container auto-adjusted to fit within canvas bounds ({canvas_width}x{canvas_height})")
+            else:
+                # Just warn if container extends beyond bounds
+                if x + width > canvas_width or y + height > canvas_height:
+                    print(f"⚠️  Warning: Modified container extends beyond canvas bounds ({canvas_width}x{canvas_height})")
+                    print(f"   Container: ({x}, {y}) to ({x + width}, {y + height})")
+                    print(f"   Canvas: (0, 0) to ({canvas_width}, {canvas_height})")
             
             # Execute JavaScript to modify container
             result = self.driver.execute_script(
@@ -209,7 +326,10 @@ class CanvasController:
             )
             
             if result:
-                print(f"✅ Container '{container_id}' modified to pos({x}, {y}) size({width}x{height})")
+                if auto_adjust and (x != original_x or y != original_y or width != original_width or height != original_height):
+                    print(f"✅ Container '{container_id}' modified to pos({x}, {y}) size({width}x{height}) (auto-adjusted)")
+                else:
+                    print(f"✅ Container '{container_id}' modified to pos({x}, {y}) size({width}x{height})")
             else:
                 print(f"❌ Container '{container_id}' not found or could not be modified")
             

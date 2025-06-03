@@ -11,6 +11,7 @@ class InteractiveCanvasTester:
     def __init__(self):
         self.controller = None
         self.running = True
+        self.auto_adjust = True  # Default: auto-adjust containers to fit canvas
     
     def display_menu(self):
         """Display the main menu options"""
@@ -25,16 +26,17 @@ class InteractiveCanvasTester:
         print("6. 🧹 Clear All Containers")
         print("7. 📸 Take Screenshot")
         print("8. 📐 Edit Canvas Size")
-        print("9. 🎪 Run Full Demo")
-        print("10. 🔄 Restart Browser")
-        print("11. ❓ Help & Instructions")
+        print(f"9. 🔧 Toggle Auto-Adjust ({'ON' if self.auto_adjust else 'OFF'})")
+        print("10. 🎪 Run Full Demo")
+        print("11. 🔄 Restart Browser")
+        print("12. ❓ Help & Instructions")
         print("0. 🚪 Exit")
         print("="*60)
     
     def get_user_choice(self):
         """Get and validate user menu choice"""
         try:
-            choice = input("Enter your choice (0-11): ").strip()
+            choice = input("Enter your choice (0-12): ").strip()
             return int(choice) if choice.isdigit() else -1
         except (ValueError, KeyboardInterrupt):
             return -1
@@ -116,7 +118,7 @@ class InteractiveCanvasTester:
                 return
             
             # Create container
-            success = self.controller.create_container(container_id, x, y, width, height)
+            success = self.controller.create_container(container_id, x, y, width, height, self.auto_adjust)
             
             if success:
                 print(f"✅ Container '{container_id}' created successfully!")
@@ -189,7 +191,7 @@ class InteractiveCanvasTester:
             height = int(input("New height: "))
             
             # Modify container
-            success = self.controller.modify_container(container_id, x, y, width, height)
+            success = self.controller.modify_container(container_id, x, y, width, height, self.auto_adjust)
             
             if success:
                 print(f"✅ Container '{container_id}' modified successfully!")
@@ -428,6 +430,29 @@ class InteractiveCanvasTester:
         except Exception as e:
             print(f"❌ Error changing canvas size: {e}")
     
+    def toggle_auto_adjust(self):
+        """Toggle auto-adjustment of containers to fit canvas bounds"""
+        print("\n🔧 Toggle Auto-Adjust")
+        
+        current_status = "ON" if self.auto_adjust else "OFF"
+        print(f"Current auto-adjust status: {current_status}")
+        print()
+        print("Auto-adjust ensures containers always fit within canvas bounds by:")
+        print("  📏 Resizing containers that are too large")
+        print("  📍 Repositioning containers that extend beyond edges")
+        print("  🔒 Preventing negative positions")
+        print()
+        
+        self.auto_adjust = not self.auto_adjust
+        new_status = "ON" if self.auto_adjust else "OFF"
+        
+        print(f"✅ Auto-adjust toggled: {current_status} → {new_status}")
+        
+        if self.auto_adjust:
+            print("🔧 Containers will now be automatically adjusted to fit canvas bounds")
+        else:
+            print("⚠️  Containers may now be placed outside canvas bounds (warnings only)")
+    
     def run_full_demo(self):
         """Run the full demo"""
         print("\n🎪 Running Full Demo")
@@ -509,6 +534,11 @@ class InteractiveCanvasTester:
         print("   - Auto-adjust: Containers are repositioned if they exceed new bounds")
         print("   - Validation: Size limits prevent unusable dimensions")
         print()
+        print("🔧 Auto-Adjust Feature:")
+        print("   - ON: Containers automatically fit within canvas bounds")
+        print("   - OFF: Containers can be placed outside bounds (warnings only)")
+        print("   - Adjusts position, size, and prevents negative coordinates")
+        print()
         print("📸 Screenshots:")
         print("   - Saved in 'screenshots/' directory")
         print("   - Auto-generated filenames include timestamp")
@@ -555,13 +585,15 @@ class InteractiveCanvasTester:
                 elif choice == 8:
                     self.edit_canvas_size()
                 elif choice == 9:
-                    self.run_full_demo()
+                    self.toggle_auto_adjust()
                 elif choice == 10:
-                    self.restart_browser()
+                    self.run_full_demo()
                 elif choice == 11:
+                    self.restart_browser()
+                elif choice == 12:
                     self.show_help()
                 else:
-                    print("❌ Invalid choice. Please enter a number between 0-11.")
+                    print("❌ Invalid choice. Please enter a number between 0-12.")
                 
                 if self.running and choice != 0:
                     input("\nPress Enter to continue...")
