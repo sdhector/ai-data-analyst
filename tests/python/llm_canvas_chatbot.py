@@ -387,19 +387,20 @@ class CanvasChatbot:
     Main chatbot class that orchestrates LLM and canvas operations
     """
     
-    def __init__(self, headless: bool = False):
+    def __init__(self, headless: bool = False, max_function_calls: int = 10):
         """
         Initialize the chatbot
         
         Args:
             headless: Whether to run browser in headless mode
+            max_function_calls: Maximum function calls per user message
         """
         self.headless = headless
         self.canvas_controller = None
         self.llm_client = None
         self.function_executor = None
         self.conversation_history = []
-        self.max_function_calls_per_turn = 5
+        self.max_function_calls_per_turn = max_function_calls
         
     def initialize(self):
         """Initialize all components"""
@@ -520,11 +521,11 @@ class CanvasChatbot:
                 
                 return final_response
         
-        return "⚠️ Completed maximum function calls. Some operations may be incomplete."
+        return f"⚠️ Reached maximum function calls limit ({self.max_function_calls_per_turn}). Some operations may be incomplete. Try breaking your request into smaller steps or increase the limit."
     
     def show_help(self):
         """Show help information"""
-        help_text = """
+        help_text = f"""
 🎯 CANVAS CHATBOT HELP
 
 Available Commands:
@@ -549,6 +550,8 @@ Tips:
 • Canvas coordinates start at (0,0) in the top-left corner
 • The system will auto-adjust containers to fit within canvas bounds
 • Containers automatically avoid overlapping with existing ones
+• For complex operations, break requests into smaller steps
+• Use 'set limit X' to adjust function call limit (current: {self.max_function_calls_per_turn})
 
 Type 'quit' to exit the chatbot.
         """
@@ -576,6 +579,19 @@ Type 'quit' to exit the chatbot.
                     
                     if user_input.lower() in ['help', '?']:
                         self.show_help()
+                        continue
+                    
+                    # Handle limit adjustment command
+                    if user_input.lower().startswith('set limit '):
+                        try:
+                            new_limit = int(user_input.split()[-1])
+                            if 1 <= new_limit <= 50:
+                                self.max_function_calls_per_turn = new_limit
+                                print(f"✅ Function call limit set to {new_limit}")
+                            else:
+                                print("❌ Limit must be between 1 and 50")
+                        except ValueError:
+                            print("❌ Invalid limit. Use: 'set limit 15'")
                         continue
                     
                     print("🤖 Assistant: ", end="", flush=True)
