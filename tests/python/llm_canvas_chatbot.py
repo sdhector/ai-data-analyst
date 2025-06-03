@@ -340,7 +340,7 @@ class CanvasFunctionExecutor:
         self.controller = canvas_controller
         self.chatbot = chatbot_instance
     
-    def _create_pie_chart_html(self, title, labels, values, container_width=400, container_height=300):
+    def _create_pie_chart_html(self, title, labels, values):
         """
         Create HTML content for a pie chart using CSS and SVG that fits within container bounds
         
@@ -348,8 +348,6 @@ class CanvasFunctionExecutor:
             title: Chart title
             labels: List of labels for pie segments
             values: List of values for pie segments
-            container_width: Width of the container in pixels
-            container_height: Height of the container in pixels
             
         Returns:
             HTML string for the pie chart
@@ -364,21 +362,8 @@ class CanvasFunctionExecutor:
             "#fa709a", "#fee140", "#30cfd0", "#a8edea", "#fed6e3"
         ]
         
-        # Calculate optimal chart size based on container dimensions
-        # Reserve space for title and legend
-        title_height = 30 if title else 0
-        legend_height = min(60, max(20, len(labels) * 8))  # Dynamic legend height
-        padding = 20
-        
-        available_height = container_height - title_height - legend_height - (padding * 2)
-        available_width = container_width - (padding * 2)
-        
-        # Make chart size responsive to container
-        chart_size = min(available_width, available_height, 200)  # Max 200px for readability
-        chart_size = max(chart_size, 100)  # Min 100px for visibility
-        
-        # Create SVG pie chart with responsive sizing
-        svg_content = f'<svg viewBox="0 0 200 200" style="width: {chart_size}px; height: {chart_size}px; max-width: 100%; max-height: 100%;">'
+        # Create SVG pie chart with responsive sizing that adapts to container
+        svg_content = f'<svg viewBox="0 0 200 200" style="width: 100%; height: auto; max-width: 200px; max-height: 200px;">'
         
         # Calculate pie segments
         current_angle = 0
@@ -413,11 +398,8 @@ class CanvasFunctionExecutor:
         
         svg_content += '</svg>'
         
-        # Create responsive legend based on container size
-        legend_font_size = max(10, min(14, container_width // 30))  # Responsive font size
-        legend_columns = max(1, min(3, container_width // 120))  # Responsive columns
-        
-        legend_html = f'<div style="display: grid; grid-template-columns: repeat({legend_columns}, 1fr); gap: 6px; margin-top: 10px; font-size: {legend_font_size}px; width: 100%; max-height: {legend_height}px; overflow-y: auto;">'
+        # Create responsive legend that adapts to container
+        legend_html = f'<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; margin-top: 10px; font-size: 12px; width: 100%; max-height: 80px; overflow-y: auto;">'
         for i, (label, value, percentage) in enumerate(zip(labels, values, percentages)):
             color = colors[i % len(colors)]
             # Truncate long labels to fit container
@@ -430,15 +412,12 @@ class CanvasFunctionExecutor:
             '''
         legend_html += '</div>'
         
-        # Create container-aware chart layout
+        # Create container-responsive chart layout that stays within bounds
         chart_html = f'''
             <div style="
-                position: absolute;
-                top: 0;
-                left: 0;
                 width: 100%;
                 height: 100%;
-                padding: {padding}px;
+                padding: 15px;
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;
@@ -449,7 +428,7 @@ class CanvasFunctionExecutor:
                 overflow: hidden;
                 font-family: Arial, sans-serif;
             ">
-                {f'<h3 style="margin: 0 0 10px 0; font-size: {max(14, min(18, container_width // 25))}px; color: #333; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{title}">{title}</h3>' if title else ''}
+                {f'<h3 style="margin: 0 0 10px 0; font-size: 16px; color: #333; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{title}">{title}</h3>' if title else ''}
                 <div style="flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 0;">
                     {svg_content}
                 </div>
@@ -462,14 +441,12 @@ class CanvasFunctionExecutor:
         clean_html = ' '.join(chart_html.split())
         return clean_html
     
-    def _refresh_pie_chart_in_container(self, container_id, new_width, new_height):
+    def _refresh_pie_chart_in_container(self, container_id):
         """
-        Refresh a pie chart in a container with new dimensions
+        Refresh a pie chart in a container (chart will auto-adapt to container size)
         
         Args:
             container_id: ID of the container
-            new_width: New container width
-            new_height: New container height
             
         Returns:
             bool: Success status
@@ -504,8 +481,8 @@ class CanvasFunctionExecutor:
             values = [35, 25, 20, 12, 8]
             title = chart_data['title']
             
-            # Recreate the chart with new dimensions
-            chart_html = self._create_pie_chart_html(title, labels, values, new_width, new_height)
+            # Recreate the chart (will auto-adapt to container dimensions)
+            chart_html = self._create_pie_chart_html(title, labels, values)
             
             # Update the container content using safer DOM manipulation
             success = self.controller.driver.execute_script("""
@@ -533,8 +510,7 @@ class CanvasFunctionExecutor:
                     }
                     
                     // Update stored dimensions
-                    container.setAttribute('data-chart-width', arguments[2]);
-                    container.setAttribute('data-chart-height', arguments[3]);
+                    // Chart dimensions are now auto-adaptive
                     
                     console.log('Pie chart refreshed in container:', arguments[0]);
                     return true;
@@ -543,7 +519,7 @@ class CanvasFunctionExecutor:
                     console.error('Error refreshing pie chart:', error);
                     return false;
                 }
-            """, container_id, chart_html, str(new_width), str(new_height))
+            """, container_id, chart_html)
             
             return success
             
@@ -678,14 +654,10 @@ class CanvasFunctionExecutor:
                         else:
                             result_msg += f" {actual_size}"
                         
-                        # Refresh any pie charts in the modified container to fit new dimensions
-                        pie_chart_refreshed = self._refresh_pie_chart_in_container(
-                            arguments["container_id"], 
-                            modified_container['width'], 
-                            modified_container['height']
-                        )
+                        # Refresh any pie charts in the modified container (auto-adapts to new size)
+                        pie_chart_refreshed = self._refresh_pie_chart_in_container(arguments["container_id"])
                         if pie_chart_refreshed:
-                            result_msg += " (pie chart automatically resized to fit new container dimensions)"
+                            result_msg += " (pie chart automatically adapted to new container dimensions)"
                 else:
                     # Check if container exists to provide better error message
                     state = self.controller.get_current_state()
@@ -809,9 +781,7 @@ class CanvasFunctionExecutor:
                             "function_name": function_name
                         }
                     
-                    # Get container dimensions for responsive chart sizing
-                    container_width = target_container['width']
-                    container_height = target_container['height']
+                    # Container dimensions are no longer needed - chart will be responsive
                     
                     # Prepare chart data
                     if use_sample_data:
@@ -838,8 +808,8 @@ class CanvasFunctionExecutor:
                         
                         data_source = "custom data"
                     
-                    # Create pie chart HTML content with container dimensions
-                    chart_html = self._create_pie_chart_html(title, labels, values, container_width, container_height)
+                    # Create pie chart HTML content that adapts to container
+                    chart_html = self._create_pie_chart_html(title, labels, values)
                     
                     # Inject the chart into the container using safer DOM manipulation
                     # First, pass the HTML content as an argument to avoid escaping issues
@@ -856,7 +826,7 @@ class CanvasFunctionExecutor:
                         }
                         
                         try {
-                            // Ensure container has relative positioning for absolute child positioning
+                            // Ensure container has proper positioning and overflow
                             container.style.position = 'relative';
                             container.style.overflow = 'hidden';
                             
@@ -892,8 +862,6 @@ class CanvasFunctionExecutor:
                             // Mark container as having chart content
                             container.setAttribute('data-content-type', 'pie-chart');
                             container.setAttribute('data-chart-title', arguments[2]);
-                            container.setAttribute('data-chart-width', arguments[3]);
-                            container.setAttribute('data-chart-height', arguments[4]);
                             
                             console.log('Pie chart successfully injected into container:', arguments[0], 'with', container.children.length, 'child elements');
                             return true;
@@ -902,7 +870,7 @@ class CanvasFunctionExecutor:
                             console.error('Error injecting pie chart:', error);
                             return false;
                         }
-                    """, container_id, chart_html, title, str(container_width), str(container_height))
+                    """, container_id, chart_html, title)
                     
                     if success:
                         result_msg = f"Pie chart '{title}' created successfully in container '{container_id}' using {data_source}"
@@ -984,8 +952,7 @@ class CanvasFunctionExecutor:
                             hasContent: container.innerHTML.length > 0,
                             contentType: container.getAttribute('data-content-type'),
                             chartTitle: container.getAttribute('data-chart-title'),
-                            chartWidth: container.getAttribute('data-chart-width'),
-                            chartHeight: container.getAttribute('data-chart-height'),
+
                             childCount: container.children.length,
                             innerHTML: container.innerHTML.length > 0 ? container.innerHTML.substring(0, 200) + '...' : 'Empty',
                             containerStyle: {
@@ -1391,9 +1358,9 @@ def main():
         return
     
     # Ask about headless mode
-    headless_input = input("Run browser in headless mode? (y/N): ").strip().lower()
-    headless = headless_input == 'y'
-    
+    # headless_input = input("Run browser in headless mode? (y/N): ").strip().lower()
+    # headless = headless_input == 'y'
+    headless = False
     # Create and run chatbot
     chatbot = CanvasChatbot(headless=headless)
     chatbot.run()
