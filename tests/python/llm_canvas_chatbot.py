@@ -6,6 +6,7 @@ the canvas through natural language commands. Follows the core AI engine archite
 """
 
 import json
+import math
 import os
 import sys
 from typing import Dict, Any, List, Optional
@@ -221,7 +222,40 @@ Be helpful, clear, and always confirm successful operations with a final summary
                     "required": ["width", "height"]
                 }
             },
-
+            {
+                "name": "create_pie_chart",
+                "description": "Create a pie chart visualization in a container with sample data or custom data",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "container_id": {
+                            "type": "string",
+                            "description": "ID of the container to place the pie chart in. Must be an existing container."
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "Title for the pie chart",
+                            "default": "Pie Chart"
+                        },
+                        "use_sample_data": {
+                            "type": "boolean",
+                            "description": "Whether to use default sample data (Technology, Healthcare, Finance, Education, Retail)",
+                            "default": true
+                        },
+                        "labels": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Custom labels for pie chart segments (only used if use_sample_data is false)"
+                        },
+                        "values": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "description": "Custom values for pie chart segments (only used if use_sample_data is false)"
+                        }
+                    },
+                    "required": ["container_id"]
+                }
+            },
             {
                 "name": "get_canvas_settings",
                 "description": "Get current canvas behavior settings (auto-adjust and overlap prevention status)",
@@ -291,6 +325,89 @@ class CanvasFunctionExecutor:
         """
         self.controller = canvas_controller
         self.chatbot = chatbot_instance
+    
+    def _create_pie_chart_html(self, title, labels, values):
+        """
+        Create HTML content for a pie chart using CSS and SVG
+        
+        Args:
+            title: Chart title
+            labels: List of labels for pie segments
+            values: List of values for pie segments
+            
+        Returns:
+            HTML string for the pie chart
+        """
+        # Calculate percentages and cumulative angles
+        total = sum(values)
+        percentages = [(value / total) * 100 for value in values]
+        
+        # Colors for pie segments
+        colors = [
+            "#667eea", "#764ba2", "#f093fb", "#4facfe", "#00f2fe",
+            "#fa709a", "#fee140", "#30cfd0", "#a8edea", "#fed6e3"
+        ]
+        
+        # Create SVG pie chart
+        svg_content = '<svg viewBox="0 0 200 200" style="width: 100%; height: 60%; max-height: 200px;">'
+        
+        # Calculate pie segments
+        current_angle = 0
+        for i, (label, value, percentage) in enumerate(zip(labels, values, percentages)):
+            color = colors[i % len(colors)]
+            
+            # Calculate arc parameters
+            angle = (percentage / 100) * 360
+            end_angle = current_angle + angle
+            
+            # Convert to radians for calculation
+            start_rad = (current_angle * 3.14159) / 180
+            end_rad = (end_angle * 3.14159) / 180
+            
+            # Calculate arc coordinates
+            x1 = 100 + 80 * math.cos(start_rad)
+            y1 = 100 + 80 * math.sin(start_rad)
+            x2 = 100 + 80 * math.cos(end_rad)
+            y2 = 100 + 80 * math.sin(end_rad)
+            
+            # Large arc flag
+            large_arc = 1 if angle > 180 else 0
+            
+            # Create path for pie segment
+            path = f'M 100 100 L {x1} {y1} A 80 80 0 {large_arc} 1 {x2} {y2} Z'
+            
+            svg_content += f'<path d="{path}" fill="{color}" stroke="white" stroke-width="2" opacity="0.8">'
+            svg_content += f'<title>{label}: {value} ({percentage:.1f}%)</title>'
+            svg_content += '</path>'
+            
+            current_angle = end_angle
+        
+        svg_content += '</svg>'
+        
+        # Create legend
+        legend_html = '<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 12px;">'
+        for i, (label, value, percentage) in enumerate(zip(labels, values, percentages)):
+            color = colors[i % len(colors)]
+            legend_html += f'''
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <div style="width: 12px; height: 12px; background-color: {color}; border-radius: 2px;"></div>
+                    <span>{label}: {percentage:.1f}%</span>
+                </div>
+            '''
+        legend_html += '</div>'
+        
+        # Combine everything
+        chart_html = f'''
+            <div style="padding: 15px; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: white; border-radius: 8px;">
+                <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333; text-align: center;">{title}</h3>
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center; width: 100%;">
+                    {svg_content}
+                </div>
+                {legend_html}
+            </div>
+        '''
+        
+        return chart_html.replace('\n', '').replace('"', '\\"')
     
     def execute_function_call(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -512,6 +629,99 @@ class CanvasFunctionExecutor:
                     }
             
             
+            elif function_name == "create_pie_chart":
+                try:
+                    container_id = arguments["container_id"]
+                    title = arguments.get("title", "Pie Chart")
+                    use_sample_data = arguments.get("use_sample_data", True)
+                    
+                    # Check if container exists
+                    state = self.controller.get_current_state()
+                    if not state or not state.get('containers'):
+                        return {
+                            "status": "error",
+                            "result": f"No containers exist on canvas. Create a container first before adding a pie chart.",
+                            "function_name": function_name
+                        }
+                    
+                    container_exists = any(c['id'] == container_id for c in state['containers'])
+                    if not container_exists:
+                        existing_ids = [c['id'] for c in state['containers']]
+                        return {
+                            "status": "error",
+                            "result": f"Container '{container_id}' not found. Available containers: {', '.join(existing_ids)}. Use get_canvas_state() to check current containers.",
+                            "function_name": function_name
+                        }
+                    
+                    # Prepare chart data
+                    if use_sample_data:
+                        labels = ["Technology", "Healthcare", "Finance", "Education", "Retail"]
+                        values = [35, 25, 20, 12, 8]
+                        data_source = "sample data"
+                    else:
+                        labels = arguments.get("labels", [])
+                        values = arguments.get("values", [])
+                        
+                        if not labels or not values:
+                            return {
+                                "status": "error",
+                                "result": "When use_sample_data is false, both 'labels' and 'values' must be provided.",
+                                "function_name": function_name
+                            }
+                        
+                        if len(labels) != len(values):
+                            return {
+                                "status": "error",
+                                "result": f"Labels and values must have the same length. Got {len(labels)} labels and {len(values)} values.",
+                                "function_name": function_name
+                            }
+                        
+                        data_source = "custom data"
+                    
+                    # Create pie chart HTML content
+                    chart_html = self._create_pie_chart_html(title, labels, values)
+                    
+                    # Inject the chart into the container
+                    success = self.controller.driver.execute_script(f"""
+                        const container = document.getElementById('{container_id}');
+                        if (!container) return false;
+                        
+                        // Clear existing content
+                        container.innerHTML = `{chart_html}`;
+                        
+                        // Mark container as having chart content
+                        container.setAttribute('data-content-type', 'pie-chart');
+                        container.setAttribute('data-chart-title', '{title}');
+                        
+                        return true;
+                    """)
+                    
+                    if success:
+                        result_msg = f"Pie chart '{title}' created successfully in container '{container_id}' using {data_source}"
+                        if not use_sample_data:
+                            result_msg += f" with {len(labels)} segments"
+                    else:
+                        result_msg = f"Failed to create pie chart in container '{container_id}'"
+                    
+                    return {
+                        "status": "success" if success else "error",
+                        "result": result_msg,
+                        "chart_data": {
+                            "title": title,
+                            "labels": labels,
+                            "values": values,
+                            "segments": len(labels)
+                        },
+                        "function_name": function_name
+                    }
+                    
+                except Exception as e:
+                    return {
+                        "status": "error",
+                        "result": f"Error creating pie chart: {str(e)}",
+                        "function_name": function_name
+                    }
+            
             elif function_name == "get_canvas_settings":
                 return {
                     "status": "success",
@@ -529,7 +739,7 @@ class CanvasFunctionExecutor:
                     "error": f"Unknown function: {function_name}",
                     "available_functions": ["create_container", "delete_container", "modify_container", 
                                           "get_canvas_state", "clear_canvas", "take_screenshot", 
-                                          "get_canvas_size", "edit_canvas_size", "get_canvas_settings"]
+                                          "get_canvas_size", "edit_canvas_size", "create_pie_chart", "get_canvas_settings"]
                 }
                 
         except Exception as e:
@@ -770,6 +980,7 @@ Available Commands:
 • Create containers: "Create a container called 'chart1' at 100,100 with size 300x200"
 • Delete containers: "Delete the container named 'chart1'"
 • Modify containers: "Move container 'chart1' to position 200,150 and resize to 400x250"
+• Create pie charts: "Create a pie chart in container 'chart1'" or "Add a pie chart with custom data"
 • View canvas: "Show me the current canvas state"
 • Clear canvas: "Clear all containers"
 • Take screenshot: "Take a screenshot and save it as 'my_canvas.png'"
@@ -781,6 +992,8 @@ Natural Language Examples:
 • "Put a small container in the top left corner"
 • "Create three containers side by side"
 • "Make a large container in the center"
+• "Add a pie chart to the container I just created"
+• "Create a pie chart showing sales data with custom values"
 • "Remove all containers and start fresh"
 • "Show me what's on the canvas right now"
 • "Allow containers to overlap"
@@ -790,6 +1003,9 @@ Tips:
 • Be specific about positions (x,y coordinates) and sizes (width x height)
 • Container IDs should be unique strings
 • Canvas coordinates start at (0,0) in the top-left corner
+• Pie charts require an existing container - create a container first
+• Pie charts use sample data by default (Technology, Healthcare, Finance, Education, Retail)
+• You can provide custom labels and values for pie charts
 • Auto-adjustment and overlap prevention are enabled by default
 • You can control these behaviors through natural language commands
 • For precise positioning, consider disabling auto-adjustment
