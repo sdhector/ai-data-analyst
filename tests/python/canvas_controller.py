@@ -90,6 +90,78 @@ class CanvasController:
         except:
             return {"width": 800, "height": 600}  # Fallback to default
     
+    def get_existing_containers(self):
+        """Get positions and sizes of all existing containers"""
+        try:
+            containers = self.driver.execute_script("""
+                const containers = [];
+                for (const [id, container] of window.canvasState.containers) {
+                    containers.push({
+                        id: id,
+                        x: container.x,
+                        y: container.y,
+                        width: container.width,
+                        height: container.height
+                    });
+                }
+                return containers;
+            """)
+            return containers
+        except:
+            return []
+    
+    def check_overlap(self, x1, y1, w1, h1, x2, y2, w2, h2):
+        """Check if two rectangles overlap"""
+        return not (x1 + w1 <= x2 or x2 + w2 <= x1 or y1 + h1 <= y2 or y2 + h2 <= y1)
+    
+    def find_non_overlapping_position(self, width, height, canvas_width, canvas_height, existing_containers, preferred_x=None, preferred_y=None):
+        """Find a position where the container won't overlap with existing ones"""
+        # If preferred position is given and doesn't overlap, use it
+        if preferred_x is not None and preferred_y is not None:
+            overlaps = False
+            for container in existing_containers:
+                if self.check_overlap(preferred_x, preferred_y, width, height,
+                                    container['x'], container['y'], container['width'], container['height']):
+                    overlaps = True
+                    break
+            
+            if not overlaps and preferred_x + width <= canvas_width and preferred_y + height <= canvas_height:
+                return preferred_x, preferred_y
+        
+        # Try to find a non-overlapping position
+        # Start from top-left and scan in a grid pattern
+        step_size = 20  # Grid step size for positioning
+        
+        for y in range(0, canvas_height - height + 1, step_size):
+            for x in range(0, canvas_width - width + 1, step_size):
+                # Check if this position overlaps with any existing container
+                overlaps = False
+                for container in existing_containers:
+                    if self.check_overlap(x, y, width, height,
+                                        container['x'], container['y'], container['width'], container['height']):
+                        overlaps = True
+                        break
+                
+                if not overlaps:
+                    return x, y
+        
+        # If no non-overlapping position found, try smaller step size
+        step_size = 5
+        for y in range(0, canvas_height - height + 1, step_size):
+            for x in range(0, canvas_width - width + 1, step_size):
+                overlaps = False
+                for container in existing_containers:
+                    if self.check_overlap(x, y, width, height,
+                                        container['x'], container['y'], container['width'], container['height']):
+                        overlaps = True
+                        break
+                
+                if not overlaps:
+                    return x, y
+        
+        # If still no position found, return top-left corner (last resort)
+        return 0, 0
+    
     def get_current_state(self):
         """
         Get the current state of the canvas
@@ -116,7 +188,7 @@ class CanvasController:
             print(f"❌ Error getting canvas state: {e}")
             return None
     
-    def create_container(self, container_id, x, y, width, height, auto_adjust=True):
+    def create_container(self, container_id, x, y, width, height, auto_adjust=True, avoid_overlap=True):
         """
         Create a new container on the canvas
         
@@ -127,6 +199,7 @@ class CanvasController:
             width (int): Width in pixels
             height (int): Height in pixels
             auto_adjust (bool): Whether to automatically adjust position/size to fit canvas
+            avoid_overlap (bool): Whether to automatically avoid overlapping with existing containers
             
         Returns:
             bool: True if successful, False otherwise
@@ -139,10 +212,11 @@ class CanvasController:
             if not all(isinstance(val, (int, float)) and val >= 0 for val in [x, y, width, height]):
                 raise ValueError("Position and size values must be non-negative numbers")
             
-            # Get current canvas size
+            # Get current canvas size and existing containers
             canvas_size = self.get_canvas_size()
             canvas_width = canvas_size.get('width', 800)
             canvas_height = canvas_size.get('height', 600)
+            existing_containers = self.get_existing_containers()
             
             # Store original values for reporting
             original_x, original_y, original_width, original_height = x, y, width, height
@@ -192,6 +266,42 @@ class CanvasController:
                     print(f"   Container: ({x}, {y}) to ({x + width}, {y + height})")
                     print(f"   Canvas: (0, 0) to ({canvas_width}, {canvas_height})")
             
+            # Check for overlaps and find non-overlapping position if needed
+            if avoid_overlap and existing_containers:
+                # Check if current position overlaps with existing containers
+                overlaps = False
+                overlapping_containers = []
+                
+                for container in existing_containers:
+                    if self.check_overlap(x, y, width, height,
+                                        container['x'], container['y'], container['width'], container['height']):
+                        overlaps = True
+                        overlapping_containers.append(container['id'])
+                
+                if overlaps:
+                    print(f"🚫 Position ({x}, {y}) overlaps with: {', '.join(overlapping_containers)}")
+                    
+                    # Find a non-overlapping position
+                    new_x, new_y = self.find_non_overlapping_position(
+                        width, height, canvas_width, canvas_height, existing_containers, x, y
+                    )
+                    
+                    if new_x != x or new_y != y:
+                        print(f"🔄 Found non-overlapping position: ({x}, {y}) → ({new_x}, {new_y})")
+                        x, y = new_x, new_y
+                    else:
+                        print(f"⚠️  Could not find completely non-overlapping position")
+            elif not avoid_overlap and existing_containers:
+                # Just warn about overlaps
+                overlapping_containers = []
+                for container in existing_containers:
+                    if self.check_overlap(x, y, width, height,
+                                        container['x'], container['y'], container['width'], container['height']):
+                        overlapping_containers.append(container['id'])
+                
+                if overlapping_containers:
+                    print(f"⚠️  Warning: Container will overlap with: {', '.join(overlapping_containers)}")
+            
             # Execute JavaScript to create container
             result = self.driver.execute_script(
                 "return window.canvasAPI.createContainer(arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]);",
@@ -199,8 +309,17 @@ class CanvasController:
             )
             
             if result:
-                if auto_adjust and (x != original_x or y != original_y or width != original_width or height != original_height):
-                    print(f"✅ Container '{container_id}' created at ({x}, {y}) with size {width}x{height} (auto-adjusted)")
+                adjustments = []
+                if auto_adjust and (width != original_width or height != original_height):
+                    adjustments.append("size-adjusted")
+                if auto_adjust and (x != original_x or y != original_y):
+                    adjustments.append("position-adjusted")
+                if avoid_overlap and existing_containers and (x != original_x or y != original_y):
+                    adjustments.append("overlap-avoided")
+                
+                if adjustments:
+                    adjustment_text = ", ".join(adjustments)
+                    print(f"✅ Container '{container_id}' created at ({x}, {y}) with size {width}x{height} ({adjustment_text})")
                 else:
                     print(f"✅ Container '{container_id}' created at ({x}, {y}) with size {width}x{height}")
             else:
@@ -243,7 +362,7 @@ class CanvasController:
             print(f"❌ Error deleting container: {e}")
             return False
     
-    def modify_container(self, container_id, x, y, width, height, auto_adjust=True):
+    def modify_container(self, container_id, x, y, width, height, auto_adjust=True, avoid_overlap=True):
         """
         Modify an existing container's position and size
         
@@ -254,6 +373,7 @@ class CanvasController:
             width (int): New width in pixels
             height (int): New height in pixels
             auto_adjust (bool): Whether to automatically adjust position/size to fit canvas
+            avoid_overlap (bool): Whether to automatically avoid overlapping with existing containers
             
         Returns:
             bool: True if successful, False otherwise
@@ -266,10 +386,14 @@ class CanvasController:
             if not all(isinstance(val, (int, float)) and val >= 0 for val in [x, y, width, height]):
                 raise ValueError("Position and size values must be non-negative numbers")
             
-            # Get current canvas size
+            # Get current canvas size and existing containers
             canvas_size = self.get_canvas_size()
             canvas_width = canvas_size.get('width', 800)
             canvas_height = canvas_size.get('height', 600)
+            existing_containers = self.get_existing_containers()
+            
+            # Filter out the container being modified from overlap checking
+            existing_containers = [c for c in existing_containers if c['id'] != container_id]
             
             # Store original values for reporting
             original_x, original_y, original_width, original_height = x, y, width, height
@@ -319,6 +443,42 @@ class CanvasController:
                     print(f"   Container: ({x}, {y}) to ({x + width}, {y + height})")
                     print(f"   Canvas: (0, 0) to ({canvas_width}, {canvas_height})")
             
+            # Check for overlaps and find non-overlapping position if needed
+            if avoid_overlap and existing_containers:
+                # Check if current position overlaps with existing containers
+                overlaps = False
+                overlapping_containers = []
+                
+                for container in existing_containers:
+                    if self.check_overlap(x, y, width, height,
+                                        container['x'], container['y'], container['width'], container['height']):
+                        overlaps = True
+                        overlapping_containers.append(container['id'])
+                
+                if overlaps:
+                    print(f"🚫 Position ({x}, {y}) would overlap with: {', '.join(overlapping_containers)}")
+                    
+                    # Find a non-overlapping position
+                    new_x, new_y = self.find_non_overlapping_position(
+                        width, height, canvas_width, canvas_height, existing_containers, x, y
+                    )
+                    
+                    if new_x != x or new_y != y:
+                        print(f"🔄 Found non-overlapping position: ({x}, {y}) → ({new_x}, {new_y})")
+                        x, y = new_x, new_y
+                    else:
+                        print(f"⚠️  Could not find completely non-overlapping position")
+            elif not avoid_overlap and existing_containers:
+                # Just warn about overlaps
+                overlapping_containers = []
+                for container in existing_containers:
+                    if self.check_overlap(x, y, width, height,
+                                        container['x'], container['y'], container['width'], container['height']):
+                        overlapping_containers.append(container['id'])
+                
+                if overlapping_containers:
+                    print(f"⚠️  Warning: Container will overlap with: {', '.join(overlapping_containers)}")
+            
             # Execute JavaScript to modify container
             result = self.driver.execute_script(
                 "return window.canvasAPI.modifyContainer(arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]);",
@@ -326,8 +486,17 @@ class CanvasController:
             )
             
             if result:
-                if auto_adjust and (x != original_x or y != original_y or width != original_width or height != original_height):
-                    print(f"✅ Container '{container_id}' modified to pos({x}, {y}) size({width}x{height}) (auto-adjusted)")
+                adjustments = []
+                if auto_adjust and (width != original_width or height != original_height):
+                    adjustments.append("size-adjusted")
+                if auto_adjust and (x != original_x or y != original_y):
+                    adjustments.append("position-adjusted")
+                if avoid_overlap and existing_containers and (x != original_x or y != original_y):
+                    adjustments.append("overlap-avoided")
+                
+                if adjustments:
+                    adjustment_text = ", ".join(adjustments)
+                    print(f"✅ Container '{container_id}' modified to pos({x}, {y}) size({width}x{height}) ({adjustment_text})")
                 else:
                     print(f"✅ Container '{container_id}' modified to pos({x}, {y}) size({width}x{height})")
             else:

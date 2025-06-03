@@ -12,6 +12,7 @@ class InteractiveCanvasTester:
         self.controller = None
         self.running = True
         self.auto_adjust = True  # Default: auto-adjust containers to fit canvas
+        self.avoid_overlap = True  # Default: avoid overlapping containers
     
     def display_menu(self):
         """Display the main menu options"""
@@ -27,16 +28,17 @@ class InteractiveCanvasTester:
         print("7. 📸 Take Screenshot")
         print("8. 📐 Edit Canvas Size")
         print(f"9. 🔧 Toggle Auto-Adjust ({'ON' if self.auto_adjust else 'OFF'})")
-        print("10. 🎪 Run Full Demo")
-        print("11. 🔄 Restart Browser")
-        print("12. ❓ Help & Instructions")
+        print(f"10. 🚫 Toggle Overlap Prevention ({'ON' if self.avoid_overlap else 'OFF'})")
+        print("11. 🎪 Run Full Demo")
+        print("12. 🔄 Restart Browser")
+        print("13. ❓ Help & Instructions")
         print("0. 🚪 Exit")
         print("="*60)
     
     def get_user_choice(self):
         """Get and validate user menu choice"""
         try:
-            choice = input("Enter your choice (0-12): ").strip()
+            choice = input("Enter your choice (0-13): ").strip()
             return int(choice) if choice.isdigit() else -1
         except (ValueError, KeyboardInterrupt):
             return -1
@@ -118,7 +120,7 @@ class InteractiveCanvasTester:
                 return
             
             # Create container
-            success = self.controller.create_container(container_id, x, y, width, height, self.auto_adjust)
+            success = self.controller.create_container(container_id, x, y, width, height, self.auto_adjust, self.avoid_overlap)
             
             if success:
                 print(f"✅ Container '{container_id}' created successfully!")
@@ -191,7 +193,7 @@ class InteractiveCanvasTester:
             height = int(input("New height: "))
             
             # Modify container
-            success = self.controller.modify_container(container_id, x, y, width, height, self.auto_adjust)
+            success = self.controller.modify_container(container_id, x, y, width, height, self.auto_adjust, self.avoid_overlap)
             
             if success:
                 print(f"✅ Container '{container_id}' modified successfully!")
@@ -453,6 +455,29 @@ class InteractiveCanvasTester:
         else:
             print("⚠️  Containers may now be placed outside canvas bounds (warnings only)")
     
+    def toggle_overlap_prevention(self):
+        """Toggle overlap prevention for containers"""
+        print("\n🚫 Toggle Overlap Prevention")
+        
+        current_status = "ON" if self.avoid_overlap else "OFF"
+        print(f"Current overlap prevention status: {current_status}")
+        print()
+        print("Overlap prevention automatically finds non-overlapping positions by:")
+        print("  🔍 Detecting overlaps with existing containers")
+        print("  📍 Finding alternative positions using grid search")
+        print("  🎯 Prioritizing positions close to the requested location")
+        print()
+        
+        self.avoid_overlap = not self.avoid_overlap
+        new_status = "ON" if self.avoid_overlap else "OFF"
+        
+        print(f"✅ Overlap prevention toggled: {current_status} → {new_status}")
+        
+        if self.avoid_overlap:
+            print("🚫 Containers will now automatically avoid overlapping with existing ones")
+        else:
+            print("⚠️  Containers may now overlap with existing ones (warnings only)")
+    
     def run_full_demo(self):
         """Run the full demo"""
         print("\n🎪 Running Full Demo")
@@ -539,6 +564,11 @@ class InteractiveCanvasTester:
         print("   - OFF: Containers can be placed outside bounds (warnings only)")
         print("   - Adjusts position, size, and prevents negative coordinates")
         print()
+        print("🚫 Overlap Prevention:")
+        print("   - ON: Containers automatically avoid overlapping with existing ones")
+        print("   - OFF: Containers can overlap (warnings only)")
+        print("   - Uses grid search to find optimal non-overlapping positions")
+        print()
         print("📸 Screenshots:")
         print("   - Saved in 'screenshots/' directory")
         print("   - Auto-generated filenames include timestamp")
@@ -587,13 +617,15 @@ class InteractiveCanvasTester:
                 elif choice == 9:
                     self.toggle_auto_adjust()
                 elif choice == 10:
-                    self.run_full_demo()
+                    self.toggle_overlap_prevention()
                 elif choice == 11:
-                    self.restart_browser()
+                    self.run_full_demo()
                 elif choice == 12:
+                    self.restart_browser()
+                elif choice == 13:
                     self.show_help()
                 else:
-                    print("❌ Invalid choice. Please enter a number between 0-12.")
+                    print("❌ Invalid choice. Please enter a number between 0-13.")
                 
                 if self.running and choice != 0:
                     input("\nPress Enter to continue...")
