@@ -443,7 +443,10 @@ class CanvasFunctionExecutor:
             </div>
         '''
         
-        return chart_html.replace('\n', '').replace('"', '\\"')
+        # Clean up the HTML for safe injection
+        # Remove newlines and normalize whitespace, but don't escape quotes since we're using arguments
+        clean_html = ' '.join(chart_html.split())
+        return clean_html
     
     def _refresh_pie_chart_in_container(self, container_id, new_width, new_height):
         """
@@ -490,24 +493,43 @@ class CanvasFunctionExecutor:
             # Recreate the chart with new dimensions
             chart_html = self._create_pie_chart_html(title, labels, values, new_width, new_height)
             
-            # Update the container content
-            success = self.controller.driver.execute_script(f"""
-                const container = document.getElementById('{container_id}');
-                if (!container) return false;
+            # Update the container content using safer DOM manipulation
+            success = self.controller.driver.execute_script("""
+                const container = document.getElementById(arguments[0]);
+                if (!container) {
+                    console.error('Container not found for refresh:', arguments[0]);
+                    return false;
+                }
                 
-                // Update container styling
-                container.style.position = 'relative';
-                container.style.overflow = 'hidden';
-                
-                // Update content with new dimensions
-                container.innerHTML = `{chart_html}`;
-                
-                // Update stored dimensions
-                container.setAttribute('data-chart-width', '{new_width}');
-                container.setAttribute('data-chart-height', '{new_height}');
-                
-                return true;
-            """)
+                try {
+                    // Update container styling
+                    container.style.position = 'relative';
+                    container.style.overflow = 'hidden';
+                    
+                    // Clear existing content
+                    container.innerHTML = '';
+                    
+                    // Create a temporary div to parse the HTML safely
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = arguments[1];
+                    
+                    // Move all child nodes from temp div to container
+                    while (tempDiv.firstChild) {
+                        container.appendChild(tempDiv.firstChild);
+                    }
+                    
+                    // Update stored dimensions
+                    container.setAttribute('data-chart-width', arguments[2]);
+                    container.setAttribute('data-chart-height', arguments[3]);
+                    
+                    console.log('Pie chart refreshed in container:', arguments[0]);
+                    return true;
+                    
+                } catch (error) {
+                    console.error('Error refreshing pie chart:', error);
+                    return false;
+                }
+            """, container_id, chart_html, str(new_width), str(new_height))
             
             return success
             
@@ -805,33 +827,63 @@ class CanvasFunctionExecutor:
                     # Create pie chart HTML content with container dimensions
                     chart_html = self._create_pie_chart_html(title, labels, values, container_width, container_height)
                     
-                    # Inject the chart into the container with proper positioning
-                    success = self.controller.driver.execute_script(f"""
-                        const container = document.getElementById('{container_id}');
-                        if (!container) return false;
+                    # Inject the chart into the container using safer DOM manipulation
+                    # First, pass the HTML content as an argument to avoid escaping issues
+                    success = self.controller.driver.execute_script("""
+                        const container = document.getElementById(arguments[0]);
+                        if (!container) {
+                            console.error('Container not found:', arguments[0]);
+                            return false;
+                        }
                         
-                        // Ensure container has relative positioning for absolute child positioning
-                        container.style.position = 'relative';
-                        container.style.overflow = 'hidden';
-                        
-                        // Clear existing content
-                        container.innerHTML = `{chart_html}`;
-                        
-                        // Mark container as having chart content
-                        container.setAttribute('data-content-type', 'pie-chart');
-                        container.setAttribute('data-chart-title', '{title}');
-                        container.setAttribute('data-chart-width', '{container_width}');
-                        container.setAttribute('data-chart-height', '{container_height}');
-                        
-                        return true;
-                    """)
+                        try {
+                            // Ensure container has relative positioning for absolute child positioning
+                            container.style.position = 'relative';
+                            container.style.overflow = 'hidden';
+                            
+                            // Clear existing content
+                            container.innerHTML = '';
+                            
+                            // Create a temporary div to parse the HTML safely
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = arguments[1];
+                            
+                            // Move all child nodes from temp div to container
+                            while (tempDiv.firstChild) {
+                                container.appendChild(tempDiv.firstChild);
+                            }
+                            
+                            // Mark container as having chart content
+                            container.setAttribute('data-content-type', 'pie-chart');
+                            container.setAttribute('data-chart-title', arguments[2]);
+                            container.setAttribute('data-chart-width', arguments[3]);
+                            container.setAttribute('data-chart-height', arguments[4]);
+                            
+                            console.log('Pie chart successfully injected into container:', arguments[0]);
+                            return true;
+                            
+                        } catch (error) {
+                            console.error('Error injecting pie chart:', error);
+                            return false;
+                        }
+                    """, container_id, chart_html, title, str(container_width), str(container_height))
                     
                     if success:
                         result_msg = f"Pie chart '{title}' created successfully in container '{container_id}' using {data_source}"
                         if not use_sample_data:
                             result_msg += f" with {len(labels)} segments"
                     else:
-                        result_msg = f"Failed to create pie chart in container '{container_id}'"
+                        # Get more detailed error information
+                        error_info = self.controller.driver.execute_script("""
+                            const container = document.getElementById(arguments[0]);
+                            if (!container) return 'Container not found';
+                            return {
+                                hasContent: container.innerHTML.length > 0,
+                                contentType: container.getAttribute('data-content-type'),
+                                error: 'JavaScript execution failed'
+                            };
+                        """, container_id)
+                        result_msg = f"Failed to create pie chart in container '{container_id}'. Debug info: {error_info}"
                     
                     return {
                         "status": "success" if success else "error",
