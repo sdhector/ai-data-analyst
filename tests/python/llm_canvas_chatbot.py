@@ -90,13 +90,13 @@ Be helpful, clear, and always confirm successful operations with a final summary
         return [
             {
                 "name": "create_container",
-                "description": "Create a new container on the canvas at specified position and size",
+                "description": "Create a new container on the canvas at specified position and size. TIP: Consider calling get_canvas_state() first to check existing containers and avoid ID conflicts.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "container_id": {
                             "type": "string",
-                            "description": "Unique identifier for the container"
+                            "description": "Unique identifier for the container. Must be unique - check existing containers with get_canvas_state() if needed."
                         },
                         "x": {
                             "type": "integer",
@@ -120,13 +120,13 @@ Be helpful, clear, and always confirm successful operations with a final summary
             },
             {
                 "name": "delete_container",
-                "description": "Delete a container from the canvas",
+                "description": "Delete a container from the canvas. IMPORTANT: Always call get_canvas_state() first to check existing container IDs before using this function.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "container_id": {
                             "type": "string",
-                            "description": "ID of the container to delete"
+                            "description": "ID of the container to delete. Must match exactly an existing container ID from get_canvas_state()."
                         }
                     },
                     "required": ["container_id"]
@@ -134,13 +134,13 @@ Be helpful, clear, and always confirm successful operations with a final summary
             },
             {
                 "name": "modify_container",
-                "description": "Modify an existing container's position and size",
+                "description": "Modify an existing container's position and size. IMPORTANT: Always call get_canvas_state() first to check existing container IDs before using this function.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "container_id": {
                             "type": "string",
-                            "description": "ID of the container to modify"
+                            "description": "ID of the container to modify. Must match exactly an existing container ID from get_canvas_state()."
                         },
                         "x": {
                             "type": "integer",
@@ -164,7 +164,7 @@ Be helpful, clear, and always confirm successful operations with a final summary
             },
             {
                 "name": "get_canvas_state",
-                "description": "Get the current state of the canvas including all containers",
+                "description": "Get the current state of the canvas including all containers. ESSENTIAL: Call this function first before modifying or deleting containers to get accurate container IDs and positions.",
                 "parameters": {
                     "type": "object",
                     "properties": {},
@@ -372,6 +372,15 @@ class CanvasFunctionExecutor:
                         else:
                             result_msg += f" {actual_size}"
                 
+                if not result:
+                    # Check if it's an ID conflict
+                    state = self.controller.get_current_state()
+                    existing_ids = [c['id'] for c in state.get('containers', [])]
+                    if arguments["container_id"] in existing_ids:
+                        result_msg = f"Failed to create container '{arguments['container_id']}'. Container ID already exists. Existing containers: {', '.join(existing_ids)}. Use get_canvas_state() to check current containers and choose a unique ID."
+                    else:
+                        result_msg = "Failed to create container due to unknown error."
+                
                 return {
                     "status": "success" if result else "error",
                     "result": result_msg if result else "Failed to create container",
@@ -380,9 +389,21 @@ class CanvasFunctionExecutor:
             
             elif function_name == "delete_container":
                 result = self.controller.delete_container(arguments["container_id"])
+                
+                if result:
+                    result_msg = f"Container '{arguments['container_id']}' deleted successfully"
+                else:
+                    # Check if container exists to provide better error message
+                    state = self.controller.get_current_state()
+                    existing_ids = [c['id'] for c in state.get('containers', [])]
+                    if existing_ids:
+                        result_msg = f"Failed to delete container '{arguments['container_id']}'. Container not found. Available containers: {', '.join(existing_ids)}. Use get_canvas_state() to check current containers."
+                    else:
+                        result_msg = f"Failed to delete container '{arguments['container_id']}'. No containers exist on canvas. Use get_canvas_state() to verify canvas state."
+                
                 return {
                     "status": "success" if result else "error",
-                    "result": f"Container '{arguments['container_id']}' deleted successfully" if result else "Failed to delete container",
+                    "result": result_msg,
                     "function_name": function_name
                 }
             
@@ -429,9 +450,9 @@ class CanvasFunctionExecutor:
                     state = self.controller.get_current_state()
                     existing_ids = [c['id'] for c in state.get('containers', [])]
                     if existing_ids:
-                        result_msg = f"Failed to modify container '{arguments['container_id']}'. Available containers: {', '.join(existing_ids)}"
+                        result_msg = f"Failed to modify container '{arguments['container_id']}'. Container not found. Available containers: {', '.join(existing_ids)}. Use get_canvas_state() to check current containers."
                     else:
-                        result_msg = f"Failed to modify container '{arguments['container_id']}'. No containers exist on canvas."
+                        result_msg = f"Failed to modify container '{arguments['container_id']}'. No containers exist on canvas. Use get_canvas_state() to verify canvas state."
                 
                 return {
                     "status": "success" if result else "error",
