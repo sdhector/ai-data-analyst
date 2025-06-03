@@ -26,7 +26,7 @@ class CanvasLLMClient:
     LLM client specifically configured for canvas control operations
     """
     
-    def __init__(self, api_key: str = None, model: str = "gpt-3.5-turbo"):
+    def __init__(self, api_key: str = None, model: str = "gpt-4o-mini"):
         """
         Initialize the LLM client for canvas operations
         
@@ -68,13 +68,22 @@ Canvas behavior controls:
 - Use get_canvas_settings to check current behavior settings
 
 When users request canvas operations:
-1. Use the appropriate function to perform the action
-2. Always explain what you're doing
-3. Provide feedback on the results
-4. Consider adjusting behavior settings if users want specific placement behavior
-5. Suggest next steps if helpful
+1. ALWAYS start by checking current canvas state with get_canvas_state() if you need to know existing containers
+2. Use the appropriate function to perform the action
+3. Always explain what you're doing
+4. Provide feedback on the results
+5. If a function fails, check the error message and try alternative approaches
+6. Consider adjusting behavior settings if users want specific placement behavior
+7. Always provide a final text response summarizing what was accomplished
+8. Suggest next steps if helpful
 
-Be helpful, clear, and always confirm successful operations."""
+Important guidelines:
+- Container IDs must match exactly what exists on canvas (check with get_canvas_state first)
+- When overlap prevention is enabled, containers may be automatically repositioned
+- When auto-adjustment is enabled, containers may be resized to fit canvas bounds
+- Always acknowledge when automatic adjustments occur
+
+Be helpful, clear, and always confirm successful operations with a final summary."""
     
     def get_function_schemas(self) -> List[Dict]:
         """Get function schemas for canvas operations"""
@@ -266,12 +275,15 @@ Be helpful, clear, and always confirm successful operations."""
             request_params = {
                 "model": self.model,
                 "messages": messages,
-                "temperature": 0.7
+                "temperature": 0.3,  # Lower temperature for more consistent function calling
+                "max_tokens": 1000   # Ensure we don't hit token limits
             }
             
             if functions:
-                request_params["functions"] = functions
-                request_params["function_call"] = "auto"
+                # Convert functions to tools format for better compatibility
+                tools = [{"type": "function", "function": func} for func in functions]
+                request_params["tools"] = tools
+                request_params["tool_choice"] = "auto"
             
             response = self.client.chat.completions.create(**request_params)
             choice = response.choices[0]
@@ -281,6 +293,7 @@ Be helpful, clear, and always confirm successful operations."""
                 "message": choice.message,
                 "content": choice.message.content,
                 "function_call": getattr(choice.message, 'function_call', None),
+                "tool_calls": getattr(choice.message, 'tool_calls', None),
                 "finish_reason": choice.finish_reason
             }
             
@@ -330,9 +343,38 @@ class CanvasFunctionExecutor:
                     auto_adjust=self.chatbot.auto_adjust_enabled,
                     avoid_overlap=self.chatbot.overlap_prevention_enabled
                 )
+                
+                if result:
+                    # Get the actual final state to report any adjustments
+                    state = self.controller.get_current_state()
+                    created_container = None
+                    for container in state.get('containers', []):
+                        if container['id'] == arguments["container_id"]:
+                            created_container = container
+                            break
+                    
+                    result_msg = f"Container '{arguments['container_id']}' created successfully"
+                    if created_container:
+                        actual_pos = f"at ({created_container['x']}, {created_container['y']})"
+                        actual_size = f"with size {created_container['width']}x{created_container['height']}"
+                        requested_pos = f"({arguments['x']}, {arguments['y']})"
+                        requested_size = f"{arguments['width']}x{arguments['height']}"
+                        
+                        if (created_container['x'] != arguments['x'] or 
+                            created_container['y'] != arguments['y']):
+                            result_msg += f" (repositioned from {requested_pos} to {actual_pos} due to overlap prevention)"
+                        else:
+                            result_msg += f" {actual_pos}"
+                            
+                        if (created_container['width'] != arguments['width'] or 
+                            created_container['height'] != arguments['height']):
+                            result_msg += f" (resized from {requested_size} to {actual_size} due to auto-adjustment)"
+                        else:
+                            result_msg += f" {actual_size}"
+                
                 return {
                     "status": "success" if result else "error",
-                    "result": f"Container '{arguments['container_id']}' created successfully" if result else "Failed to create container",
+                    "result": result_msg if result else "Failed to create container",
                     "function_name": function_name
                 }
             
@@ -354,17 +396,77 @@ class CanvasFunctionExecutor:
                     auto_adjust=self.chatbot.auto_adjust_enabled,
                     avoid_overlap=self.chatbot.overlap_prevention_enabled
                 )
+                
+                if result:
+                    # Get the actual final state to report any adjustments
+                    state = self.controller.get_current_state()
+                    modified_container = None
+                    for container in state.get('containers', []):
+                        if container['id'] == arguments["container_id"]:
+                            modified_container = container
+                            break
+                    
+                    result_msg = f"Container '{arguments['container_id']}' modified successfully"
+                    if modified_container:
+                        actual_pos = f"to ({modified_container['x']}, {modified_container['y']})"
+                        actual_size = f"with size {modified_container['width']}x{modified_container['height']}"
+                        requested_pos = f"({arguments['x']}, {arguments['y']})"
+                        requested_size = f"{arguments['width']}x{arguments['height']}"
+                        
+                        if (modified_container['x'] != arguments['x'] or 
+                            modified_container['y'] != arguments['y']):
+                            result_msg += f" (repositioned from requested {requested_pos} to {actual_pos} due to overlap prevention)"
+                        else:
+                            result_msg += f" {actual_pos}"
+                            
+                        if (modified_container['width'] != arguments['width'] or 
+                            modified_container['height'] != arguments['height']):
+                            result_msg += f" (resized from requested {requested_size} to {actual_size} due to auto-adjustment)"
+                        else:
+                            result_msg += f" {actual_size}"
+                else:
+                    # Check if container exists to provide better error message
+                    state = self.controller.get_current_state()
+                    existing_ids = [c['id'] for c in state.get('containers', [])]
+                    if existing_ids:
+                        result_msg = f"Failed to modify container '{arguments['container_id']}'. Available containers: {', '.join(existing_ids)}"
+                    else:
+                        result_msg = f"Failed to modify container '{arguments['container_id']}'. No containers exist on canvas."
+                
                 return {
                     "status": "success" if result else "error",
-                    "result": f"Container '{arguments['container_id']}' modified successfully" if result else "Failed to modify container",
+                    "result": result_msg if result else f"Failed to modify container '{arguments['container_id']}'",
                     "function_name": function_name
                 }
             
             elif function_name == "get_canvas_state":
                 state = self.controller.get_current_state()
+                
+                # Format the state information for better LLM understanding
+                containers = state.get('containers', [])
+                if containers:
+                    container_summary = []
+                    for container in containers:
+                        summary = f"'{container['id']}': position ({container['x']}, {container['y']}), size {container['width']}x{container['height']}"
+                        container_summary.append(summary)
+                    
+                    formatted_result = {
+                        "canvas_size": state.get('canvas_size', 'Unknown'),
+                        "container_count": len(containers),
+                        "containers": containers,
+                        "summary": f"Canvas has {len(containers)} container(s): " + "; ".join(container_summary)
+                    }
+                else:
+                    formatted_result = {
+                        "canvas_size": state.get('canvas_size', 'Unknown'),
+                        "container_count": 0,
+                        "containers": [],
+                        "summary": "Canvas is empty (no containers)"
+                    }
+                
                 return {
                     "status": "success",
-                    "result": state,
+                    "result": formatted_result,
                     "function_name": function_name
                 }
             
@@ -531,8 +633,12 @@ class CanvasChatbot:
         })
         
         function_calls_made = 0
+        max_iterations = 50  # Prevent infinite loops
+        iteration_count = 0
         
-        while True:
+        while iteration_count < max_iterations:
+            iteration_count += 1
+            
             # Get LLM response
             response = self.llm_client.chat_completion(
                 messages=messages,
@@ -544,37 +650,79 @@ class CanvasChatbot:
             
             message = response["message"]
             
-            # Check if LLM wants to call a function
-            if hasattr(message, 'function_call') and message.function_call:
-                function_call = message.function_call
-                function_name = function_call.name
-                
-                try:
-                    function_args = json.loads(function_call.arguments)
-                except json.JSONDecodeError as e:
-                    return f"❌ Error: Invalid function arguments: {str(e)}"
-                
-                # Execute the function
-                function_result = self.function_executor.execute_function_call(
-                    function_name, function_args
-                )
-                
-                # Add assistant message with function call
-                messages.append({
-                    "role": "assistant",
-                    "content": "",
-                    "function_call": {
-                        "name": function_name,
-                        "arguments": function_call.arguments
-                    }
+            # Check if LLM wants to call a function (handle both old and new API formats)
+            function_calls_to_process = []
+            
+            # Handle new tools format
+            if hasattr(message, 'tool_calls') and message.tool_calls:
+                for tool_call in message.tool_calls:
+                    if tool_call.type == 'function':
+                        function_calls_to_process.append({
+                            'id': tool_call.id,
+                            'name': tool_call.function.name,
+                            'arguments': tool_call.function.arguments
+                        })
+            
+            # Handle old function_call format (fallback)
+            elif hasattr(message, 'function_call') and message.function_call:
+                function_calls_to_process.append({
+                    'id': None,
+                    'name': message.function_call.name,
+                    'arguments': message.function_call.arguments
                 })
-                
-                # Add function result
-                messages.append({
-                    "role": "function",
-                    "name": function_name,
-                    "content": json.dumps(function_result)
-                })
+            
+            if function_calls_to_process:
+                # Process each function call
+                for func_call in function_calls_to_process:
+                    function_name = func_call['name']
+                    
+                    try:
+                        function_args = json.loads(func_call['arguments'])
+                    except json.JSONDecodeError as e:
+                        return f"❌ Error: Invalid function arguments: {str(e)}"
+                    
+                    # Execute the function
+                    function_result = self.function_executor.execute_function_call(
+                        function_name, function_args
+                    )
+                    
+                    # Add assistant message with function call
+                    if func_call['id']:  # New tools format
+                        messages.append({
+                            "role": "assistant",
+                            "content": "",
+                            "tool_calls": [{
+                                "id": func_call['id'],
+                                "type": "function",
+                                "function": {
+                                    "name": function_name,
+                                    "arguments": func_call['arguments']
+                                }
+                            }]
+                        })
+                        
+                        # Add tool result
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": func_call['id'],
+                            "content": json.dumps(function_result)
+                        })
+                    else:  # Old function_call format
+                        messages.append({
+                            "role": "assistant",
+                            "content": "",
+                            "function_call": {
+                                "name": function_name,
+                                "arguments": func_call['arguments']
+                            }
+                        })
+                        
+                        # Add function result
+                        messages.append({
+                            "role": "function",
+                            "name": function_name,
+                            "content": json.dumps(function_result)
+                        })
                 
                 function_calls_made += 1
                 
@@ -585,9 +733,15 @@ class CanvasChatbot:
                     if continue_choice != 'y':
                         return f"⏹️ Stopped after {function_calls_made} function calls at user request."
                 
-                # If function failed critically, break
+                # Enhanced error handling - don't break immediately, let LLM handle errors
                 if function_result["status"] == "error":
-                    break
+                    # Add error context to help LLM understand what went wrong
+                    error_context = f"Function {function_name} failed: {function_result.get('error', 'Unknown error')}"
+                    if 'available_functions' in function_result:
+                        error_context += f" Available functions: {', '.join(function_result['available_functions'])}"
+                    print(f"❌ {error_context}")
+                    
+                    # Continue to let LLM respond to the error rather than breaking
             
             else:
                 # No function call, LLM provided final response
@@ -609,8 +763,27 @@ class CanvasChatbot:
                 
                 return final_response
         
-        # This should never be reached due to the while True loop
-        return "⚠️ Unexpected end of function calling loop."
+        # If we exit the loop without a proper response, determine why
+        if iteration_count >= max_iterations:
+            print(f"⚠️ Reached maximum iterations ({max_iterations}). Requesting final response...")
+            summary_prompt = "You have reached the maximum number of iterations. Please provide a summary of the operations performed and their results. Do not make any more function calls."
+        else:
+            print("⚠️ Function calling loop ended unexpectedly. Requesting final response...")
+            summary_prompt = "Please provide a summary of the operations performed and their results. Do not make any more function calls."
+        
+        # Add a message asking for summary
+        messages.append({
+            "role": "system",
+            "content": summary_prompt
+        })
+        
+        # Get final response without function calling
+        final_response = self.llm_client.chat_completion(messages=messages, functions=None)
+        
+        if final_response["status"] == "success" and final_response["content"]:
+            return final_response["content"]
+        else:
+            return f"⚠️ Operations completed but encountered issues. Made {function_calls_made} function calls in {iteration_count} iterations."
     
     def show_help(self):
         """Show help information"""
