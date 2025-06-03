@@ -240,7 +240,7 @@ Be helpful, clear, and always confirm successful operations with a final summary
                         "use_sample_data": {
                             "type": "boolean",
                             "description": "Whether to use default sample data (Technology, Healthcare, Finance, Education, Retail)",
-                            "default": true
+                            "default": True
                         },
                         "labels": {
                             "type": "array",
