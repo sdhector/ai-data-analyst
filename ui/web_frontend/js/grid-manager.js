@@ -141,7 +141,6 @@ class GridManager {
         const container = document.createElement('div');
         container.className = 'visualization-container';
         container.id = id;
-        container.style.position = 'absolute';
         container.innerHTML = `
             <div class="container-header">
                 <h3 class="container-title">${title}</h3>
