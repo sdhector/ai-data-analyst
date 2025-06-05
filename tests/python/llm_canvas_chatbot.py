@@ -64,59 +64,64 @@ Canvas specifications:
 
 Canvas behavior controls:
 - Auto-adjustment: Containers automatically fit within canvas bounds (always enabled for safety)
-- Overlap prevention: Containers avoid overlapping with existing ones (always enabled for safety)
+- Overlap prevention: Containers can overlap with existing ones (disabled by default, can be controlled)
 - Use get_canvas_settings to check current behavior settings
 
+CRITICAL EXECUTION RULES:
+1. NEVER DEVIATE from the user's explicit request without asking for clarification first
+2. If you encounter ANY reason to change the plan or approach, STOP and ask the user for clarification
+3. Follow the user's instructions exactly as specified - do not make assumptions or modifications
+4. NEVER CHANGE THE CANVAS SIZE without explicitly asking the user for permission first
+5. MAXIMIZE CANVAS SPACE USAGE: Always calculate optimal container sizes to make the best use of available canvas space
+6. When creating multiple containers, distribute them efficiently across the canvas to utilize the full area
+7. Calculate container dimensions based on canvas size and number of containers to maximize space utilization
+
 When users request canvas operations:
-1. ALWAYS start by checking current canvas state with get_canvas_state() if you need to know existing containers
-2. Use the appropriate function to perform the action
-3. Always explain what you're doing
-4. Provide feedback on the results
-5. If a function fails, check the error message and try alternative approaches
-6. If placement fails due to safety constraints, explain why and suggest alternatives
-7. Always provide a final text response summarizing what was accomplished
-8. Suggest next steps if helpful
+1. ALWAYS start by checking current canvas state with get_canvas_state() and get_canvas_size() to understand available space
+2. Container operations (create, modify, delete) now AUTOMATICALLY use optimal layout - no manual calculation needed
+3. Simply call the container functions with required parameters - optimization happens automatically
+4. The system will automatically maximize space usage and minimize size differences for all containers
+5. Always explain what the optimization accomplished and why specific dimensions were chosen
+6. Provide feedback on the optimization results including space utilization and layout metrics
+7. If a function fails, check the error message and try alternative approaches
+8. If placement fails due to safety constraints, explain why and ask user for clarification on how to proceed
+9. Always provide a final text response summarizing what was accomplished
+10. If you need to deviate from the user's request for any reason, ask for permission first
+
+Space Optimization Guidelines:
+- Container functions now AUTOMATICALLY optimize layout - no manual optimization calls needed
+- ALL container operations (create, modify, delete) automatically include optimization for the entire canvas
+- The system automatically calculates optimal sizes based on available canvas dimensions
+- Grid layouts and proportional sizing are automatically applied for maximum space efficiency
+- Minimal gaps between containers are automatically calculated to maximize usage
+- Aspect ratios are automatically optimized to work well with canvas dimensions
+- All containers automatically get uniform sizing for visual consistency
+- Single container operations automatically consider and optimize ALL containers on canvas
 
 Important guidelines:
 - Container IDs must match exactly what exists on canvas (check with get_canvas_state first)
 - Containers may be automatically repositioned to prevent overlaps (safety feature)
 - Containers may be resized to fit canvas bounds (safety feature)
 - Always acknowledge when automatic adjustments occur
-- If a container cannot be placed due to safety constraints, explain why and suggest alternatives
+- If a container cannot be placed due to safety constraints, ask user how to proceed rather than making assumptions
 
-Be helpful, clear, and always confirm successful operations with a final summary."""
+Be helpful, clear, precise, and always confirm successful operations with a final summary. NEVER change the user's plan without explicit permission."""
     
     def get_function_schemas(self) -> List[Dict]:
         """Get function schemas for canvas operations"""
         return [
             {
                 "name": "create_container",
-                "description": "Create a new container on the canvas at specified position and size. TIP: Consider calling get_canvas_state() first to check existing containers and avoid ID conflicts.",
+                "description": "Create a new container on the canvas using automatic optimal layout. Position and size are automatically calculated to maximize space usage and minimize size differences.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "container_id": {
                             "type": "string",
                             "description": "Unique identifier for the container. Must be unique - check existing containers with get_canvas_state() if needed."
-                        },
-                        "x": {
-                            "type": "integer",
-                            "description": "X position in pixels (0 = left edge)"
-                        },
-                        "y": {
-                            "type": "integer", 
-                            "description": "Y position in pixels (0 = top edge)"
-                        },
-                        "width": {
-                            "type": "integer",
-                            "description": "Width in pixels"
-                        },
-                        "height": {
-                            "type": "integer",
-                            "description": "Height in pixels"
                         }
                     },
-                    "required": ["container_id", "x", "y", "width", "height"]
+                    "required": ["container_id"]
                 }
             },
             {
@@ -135,32 +140,16 @@ Be helpful, clear, and always confirm successful operations with a final summary
             },
             {
                 "name": "modify_container",
-                "description": "Modify an existing container's position and size. IMPORTANT: Always call get_canvas_state() first to check existing container IDs before using this function.",
+                "description": "Modify an existing container using automatic optimal layout. All containers on canvas are re-optimized for best space usage and size uniformity. IMPORTANT: Always call get_canvas_state() first to check existing container IDs.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "container_id": {
                             "type": "string",
                             "description": "ID of the container to modify. Must match exactly an existing container ID from get_canvas_state()."
-                        },
-                        "x": {
-                            "type": "integer",
-                            "description": "New X position in pixels"
-                        },
-                        "y": {
-                            "type": "integer",
-                            "description": "New Y position in pixels"
-                        },
-                        "width": {
-                            "type": "integer",
-                            "description": "New width in pixels"
-                        },
-                        "height": {
-                            "type": "integer",
-                            "description": "New height in pixels"
                         }
                     },
-                    "required": ["container_id", "x", "y", "width", "height"]
+                    "required": ["container_id"]
                 }
             },
             {
@@ -278,6 +267,79 @@ Be helpful, clear, and always confirm successful operations with a final summary
                     },
                     "required": ["container_id"]
                 }
+            },
+            {
+                "name": "calculate_optimal_layout",
+                "description": "Calculate optimal sizes and positions for containers to minimize empty space and size differences. Use this before creating or modifying multiple containers.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "containers": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "string",
+                                        "description": "Container identifier"
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": ["existing", "new"],
+                                        "description": "Whether this container already exists on canvas or is new"
+                                    },
+                                    "current_width": {
+                                        "type": "integer",
+                                        "description": "Current width if existing container, can be omitted for new containers"
+                                    },
+                                    "current_height": {
+                                        "type": "integer",
+                                        "description": "Current height if existing container, can be omitted for new containers"
+                                    },
+                                    "current_x": {
+                                        "type": "integer",
+                                        "description": "Current x position if existing container, can be omitted for new containers"
+                                    },
+                                    "current_y": {
+                                        "type": "integer",
+                                        "description": "Current y position if existing container, can be omitted for new containers"
+                                    }
+                                },
+                                "required": ["id", "status"]
+                            },
+                            "description": "List of containers to optimize (both existing and new)"
+                        },
+                        "canvas_width": {
+                            "type": "integer",
+                            "description": "Canvas width in pixels"
+                        },
+                        "canvas_height": {
+                            "type": "integer",
+                            "description": "Canvas height in pixels"
+                        }
+                    },
+                    "required": ["containers", "canvas_width", "canvas_height"]
+                }
+            },
+            {
+                "name": "check_identifier_availability",
+                "description": "Check if an identifier is available for use and get suggestions if it conflicts with existing elements. Use this before creating containers or charts to avoid conflicts.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "proposed_identifier": {
+                            "type": "string",
+                            "description": "The identifier you want to check for availability"
+                        },
+                        "element_type": {
+                            "type": "string",
+                            "enum": ["container", "chart", "element"],
+                            "description": "Type of element the identifier will be used for",
+                            "default": "element"
+                        }
+                    },
+                    "required": ["proposed_identifier"]
+                }
             }
         ]
     
@@ -339,6 +401,169 @@ class CanvasFunctionExecutor:
         """
         self.controller = canvas_controller
         self.chatbot = chatbot_instance
+    
+    def _get_all_used_identifiers(self):
+        """
+        Get all currently used identifiers across all elements on the canvas
+        
+        Returns:
+            Dict with categorized identifiers and summary
+        """
+        try:
+            # Get container identifiers
+            current_state = self.controller.get_current_state()
+            container_ids = [c['id'] for c in current_state.get('containers', [])]
+            
+            # Get chart identifiers (from containers with chart content)
+            chart_ids = []
+            for container in current_state.get('containers', []):
+                container_id = container['id']
+                try:
+                    # Check if container has chart content
+                    chart_info = self.controller.driver.execute_script(f"""
+                        const container = document.getElementById('{container_id}');
+                        if (!container) return null;
+                        
+                        const contentType = container.getAttribute('data-content-type');
+                        const chartTitle = container.getAttribute('data-chart-title');
+                        
+                        if (contentType === 'pie-chart' && chartTitle) {{
+                            return {{
+                                chartId: chartTitle.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
+                                chartTitle: chartTitle,
+                                containerId: '{container_id}'
+                            }};
+                        }}
+                        return null;
+                    """)
+                    
+                    if chart_info and chart_info.get('chartId'):
+                        chart_ids.append(chart_info['chartId'])
+                        
+                except Exception:
+                    # Skip if there's an error checking this container
+                    continue
+            
+            # Combine all identifiers
+            all_ids = container_ids + chart_ids
+            
+            return {
+                "container_ids": container_ids,
+                "chart_ids": chart_ids,
+                "all_identifiers": all_ids,
+                "total_count": len(all_ids),
+                "summary": f"Found {len(container_ids)} container(s) and {len(chart_ids)} chart(s) - Total: {len(all_ids)} identifier(s)"
+            }
+            
+        except Exception as e:
+            print(f"⚠️ Warning: Error getting used identifiers: {e}")
+            return {
+                "container_ids": [],
+                "chart_ids": [],
+                "all_identifiers": [],
+                "total_count": 0,
+                "summary": "Error retrieving identifiers"
+            }
+    
+    def _validate_identifier_uniqueness(self, proposed_id, element_type="element"):
+        """
+        Validate that a proposed identifier is unique across all canvas elements
+        
+        Args:
+            proposed_id: The identifier to validate
+            element_type: Type of element (for error messages)
+            
+        Returns:
+            Dict with validation result and suggestions
+        """
+        if not proposed_id or not isinstance(proposed_id, str):
+            return {
+                "is_valid": False,
+                "error": f"Invalid {element_type} identifier: must be a non-empty string",
+                "proposed_id": proposed_id,
+                "suggestions": ["Use alphanumeric characters and underscores", "Example: 'chart_1', 'container_main', 'sales_data'"]
+            }
+        
+        # Clean the identifier (remove special characters, convert to lowercase)
+        clean_id = proposed_id.strip().replace(' ', '_').lower()
+        
+        # Get all used identifiers
+        used_identifiers = self._get_all_used_identifiers()
+        all_used_ids = used_identifiers["all_identifiers"]
+        
+        # Check for exact match
+        if clean_id in all_used_ids:
+            return {
+                "is_valid": False,
+                "error": f"{element_type.capitalize()} identifier '{clean_id}' is already in use",
+                "proposed_id": proposed_id,
+                "clean_id": clean_id,
+                "conflicting_with": clean_id,
+                "used_identifiers": used_identifiers,
+                "suggestions": self._generate_alternative_identifiers(clean_id, all_used_ids)
+            }
+        
+        # Check for similar identifiers (potential confusion)
+        similar_ids = [uid for uid in all_used_ids if uid.startswith(clean_id) or clean_id.startswith(uid)]
+        
+        if similar_ids:
+            return {
+                "is_valid": True,  # Valid but with warning
+                "warning": f"Identifier '{clean_id}' is similar to existing: {', '.join(similar_ids)}",
+                "proposed_id": proposed_id,
+                "clean_id": clean_id,
+                "similar_identifiers": similar_ids,
+                "used_identifiers": used_identifiers
+            }
+        
+        # Identifier is unique
+        return {
+            "is_valid": True,
+            "proposed_id": proposed_id,
+            "clean_id": clean_id,
+            "message": f"Identifier '{clean_id}' is available",
+            "used_identifiers": used_identifiers
+        }
+    
+    def _generate_alternative_identifiers(self, base_id, used_ids, max_suggestions=5):
+        """
+        Generate alternative identifier suggestions when there's a conflict
+        
+        Args:
+            base_id: The conflicting base identifier
+            used_ids: List of already used identifiers
+            max_suggestions: Maximum number of suggestions to generate
+            
+        Returns:
+            List of alternative identifier suggestions
+        """
+        suggestions = []
+        
+        # Try numbered variations
+        for i in range(1, max_suggestions + 1):
+            candidate = f"{base_id}_{i}"
+            if candidate not in used_ids:
+                suggestions.append(candidate)
+        
+        # Try common suffixes if we need more suggestions
+        suffixes = ["new", "alt", "v2", "main", "primary"]
+        for suffix in suffixes:
+            if len(suggestions) >= max_suggestions:
+                break
+            candidate = f"{base_id}_{suffix}"
+            if candidate not in used_ids:
+                suggestions.append(candidate)
+        
+        # Try prefixes if still need more
+        prefixes = ["new", "my", "temp", "draft"]
+        for prefix in prefixes:
+            if len(suggestions) >= max_suggestions:
+                break
+            candidate = f"{prefix}_{base_id}"
+            if candidate not in used_ids:
+                suggestions.append(candidate)
+        
+        return suggestions[:max_suggestions]
     
     def _create_pie_chart_html(self, title, labels, values):
         """
@@ -440,6 +665,247 @@ class CanvasFunctionExecutor:
         # Remove newlines and normalize whitespace, but don't escape quotes since we're using arguments
         clean_html = ' '.join(chart_html.split())
         return clean_html
+    
+    def _calculate_optimal_container_layout(self, containers, canvas_width, canvas_height):
+        """
+        Calculate optimal sizes and positions for containers to minimize empty space and size differences
+        
+        Args:
+            containers: List of container specifications
+            canvas_width: Canvas width in pixels
+            canvas_height: Canvas height in pixels
+            
+        Returns:
+            Dict with optimized layout recommendations
+        """
+        import math
+        
+        num_containers = len(containers)
+        if num_containers == 0:
+            return {
+                "summary": "No containers to optimize",
+                "containers": [],
+                "space_utilization": 100.0,
+                "layout_type": "empty"
+            }
+        
+        # Calculate optimal grid dimensions
+        # Try to create a layout that's as close to square as possible
+        cols = math.ceil(math.sqrt(num_containers))
+        rows = math.ceil(num_containers / cols)
+        
+        # Add small padding between containers (2% of canvas size)
+        padding_x = max(10, int(canvas_width * 0.02))
+        padding_y = max(10, int(canvas_height * 0.02))
+        
+        # Calculate available space for containers
+        available_width = canvas_width - (padding_x * (cols + 1))
+        available_height = canvas_height - (padding_y * (rows + 1))
+        
+        # Calculate optimal container size
+        container_width = max(50, int(available_width / cols))
+        container_height = max(50, int(available_height / rows))
+        
+        # Generate optimized layout
+        optimized_containers = []
+        container_index = 0
+        
+        for row in range(rows):
+            for col in range(cols):
+                if container_index >= num_containers:
+                    break
+                    
+                container = containers[container_index]
+                
+                # Calculate position
+                x = padding_x + col * (container_width + padding_x)
+                y = padding_y + row * (container_height + padding_y)
+                
+                # Ensure containers fit within canvas bounds
+                x = min(x, canvas_width - container_width - padding_x)
+                y = min(y, canvas_height - container_height - padding_y)
+                
+                optimized_container = {
+                    "id": container["id"],
+                    "status": container["status"],
+                    "recommended_x": x,
+                    "recommended_y": y,
+                    "recommended_width": container_width,
+                    "recommended_height": container_height,
+                    "grid_position": {"row": row, "col": col}
+                }
+                
+                # Include current dimensions if existing container
+                if container["status"] == "existing":
+                    optimized_container["current_x"] = container.get("current_x")
+                    optimized_container["current_y"] = container.get("current_y")
+                    optimized_container["current_width"] = container.get("current_width")
+                    optimized_container["current_height"] = container.get("current_height")
+                    
+                    # Calculate change metrics
+                    if all(key in container for key in ["current_width", "current_height"]):
+                        size_change = abs(container_width * container_height - 
+                                        container["current_width"] * container["current_height"])
+                        optimized_container["size_change_pixels"] = size_change
+                
+                optimized_containers.append(optimized_container)
+                container_index += 1
+        
+        # Calculate space utilization
+        total_container_area = num_containers * container_width * container_height
+        canvas_area = canvas_width * canvas_height
+        space_utilization = (total_container_area / canvas_area) * 100
+        
+        # Calculate size uniformity (all containers will have same size)
+        size_uniformity = 100.0  # Perfect uniformity since all containers are same size
+        
+        # Generate layout summary
+        layout_summary = {
+            "summary": f"Optimized layout for {num_containers} containers in {cols}x{rows} grid",
+            "layout_type": f"{cols}x{rows}_grid",
+            "containers": optimized_containers,
+            "metrics": {
+                "space_utilization_percent": round(space_utilization, 1),
+                "size_uniformity_percent": size_uniformity,
+                "container_size": f"{container_width}x{container_height}",
+                "grid_dimensions": f"{cols}x{rows}",
+                "padding": f"{padding_x}x{padding_y}"
+            },
+            "canvas_info": {
+                "canvas_size": f"{canvas_width}x{canvas_height}",
+                "available_space": f"{available_width}x{available_height}",
+                "total_containers": num_containers
+            },
+            "recommendations": [
+                f"Use {container_width}x{container_height} size for all containers",
+                f"Arrange in {cols}x{rows} grid pattern",
+                f"Space utilization: {round(space_utilization, 1)}%",
+                "All containers will have uniform size for visual consistency"
+            ]
+        }
+        
+        return layout_summary
+    
+    def _get_all_containers_for_optimization(self, new_container_id=None, exclude_container_id=None):
+        """
+        Get all containers (existing + new) for optimization calculation
+        
+        Args:
+            new_container_id: ID of new container to include
+            exclude_container_id: ID of container to exclude (for deletion)
+            
+        Returns:
+            List of container specifications for optimization
+        """
+        # Get current canvas state
+        current_state = self.controller.get_current_state()
+        existing_containers = current_state.get('containers', [])
+        
+        containers_for_optimization = []
+        
+        # Add existing containers (except excluded ones)
+        for container in existing_containers:
+            if exclude_container_id and container['id'] == exclude_container_id:
+                continue  # Skip container being deleted
+                
+            containers_for_optimization.append({
+                "id": container['id'],
+                "status": "existing",
+                "current_x": container['x'],
+                "current_y": container['y'],
+                "current_width": container['width'],
+                "current_height": container['height']
+            })
+        
+        # Add new container if specified
+        if new_container_id:
+            containers_for_optimization.append({
+                "id": new_container_id,
+                "status": "new"
+            })
+        
+        return containers_for_optimization
+    
+    def _apply_optimized_layout(self, optimization_result, target_container_id=None):
+        """
+        Apply the optimized layout to all containers
+        
+        Args:
+            optimization_result: Result from _calculate_optimal_container_layout
+            target_container_id: If specified, only return info for this container
+            
+        Returns:
+            Dict with operation results and optimization info
+        """
+        if not optimization_result or 'containers' not in optimization_result:
+            return {
+                "success": False,
+                "error": "Invalid optimization result",
+                "optimization_used": False
+            }
+        
+        optimized_containers = optimization_result['containers']
+        results = []
+        target_result = None
+        
+        for opt_container in optimized_containers:
+            container_id = opt_container['id']
+            
+            # Apply the optimized dimensions
+            if opt_container['status'] == 'existing':
+                # Modify existing container
+                success = self.controller.modify_container(
+                    container_id=container_id,
+                    x=opt_container['recommended_x'],
+                    y=opt_container['recommended_y'],
+                    width=opt_container['recommended_width'],
+                    height=opt_container['recommended_height'],
+                    auto_adjust=self.chatbot.auto_adjust_enabled,
+                    avoid_overlap=self.chatbot.overlap_prevention_enabled
+                )
+            else:
+                # Create new container
+                success = self.controller.create_container(
+                    container_id=container_id,
+                    x=opt_container['recommended_x'],
+                    y=opt_container['recommended_y'],
+                    width=opt_container['recommended_width'],
+                    height=opt_container['recommended_height'],
+                    auto_adjust=self.chatbot.auto_adjust_enabled,
+                    avoid_overlap=self.chatbot.overlap_prevention_enabled
+                )
+            
+            container_result = {
+                "container_id": container_id,
+                "success": success,
+                "status": opt_container['status'],
+                "optimized_position": (opt_container['recommended_x'], opt_container['recommended_y']),
+                "optimized_size": (opt_container['recommended_width'], opt_container['recommended_height']),
+                "grid_position": opt_container.get('grid_position', {})
+            }
+            
+            # Add change information for existing containers
+            if opt_container['status'] == 'existing':
+                container_result["previous_position"] = (opt_container.get('current_x'), opt_container.get('current_y'))
+                container_result["previous_size"] = (opt_container.get('current_width'), opt_container.get('current_height'))
+                container_result["size_change_pixels"] = opt_container.get('size_change_pixels', 0)
+            
+            results.append(container_result)
+            
+            # Track target container result
+            if target_container_id and container_id == target_container_id:
+                target_result = container_result
+        
+        return {
+            "success": True,
+            "optimization_used": True,
+            "optimization_result": optimization_result,
+            "container_results": results,
+            "target_container": target_result,
+            "metrics": optimization_result.get('metrics', {}),
+            "layout_summary": optimization_result.get('summary', ''),
+            "recommendations": optimization_result.get('recommendations', [])
+        }
     
     def _refresh_pie_chart_in_container(self, container_id):
         """
@@ -579,136 +1045,286 @@ class CanvasFunctionExecutor:
         
         try:
             if function_name == "create_container":
-                result = self.controller.create_container(
-                    container_id=arguments["container_id"],
-                    x=arguments["x"],
-                    y=arguments["y"],
-                    width=arguments["width"],
-                    height=arguments["height"],
-                    auto_adjust=self.chatbot.auto_adjust_enabled,
-                    avoid_overlap=self.chatbot.overlap_prevention_enabled
-                )
-                
-                if result:
-                    # Get the actual final state to report any adjustments
-                    state = self.controller.get_current_state()
-                    created_container = None
-                    for container in state.get('containers', []):
-                        if container['id'] == arguments["container_id"]:
-                            created_container = container
-                            break
+                try:
+                    container_id = arguments["container_id"]
                     
-                    result_msg = f"Container '{arguments['container_id']}' created successfully"
-                    if created_container:
-                        actual_pos = f"at ({created_container['x']}, {created_container['y']})"
-                        actual_size = f"with size {created_container['width']}x{created_container['height']}"
-                        requested_pos = f"({arguments['x']}, {arguments['y']})"
-                        requested_size = f"{arguments['width']}x{arguments['height']}"
+                    # GUARDRAIL: Validate identifier uniqueness across all elements
+                    validation_result = self._validate_identifier_uniqueness(container_id, "container")
+                    
+                    if not validation_result["is_valid"]:
+                        used_info = validation_result["used_identifiers"]
+                        error_msg = f"❌ {validation_result['error']}\n"
+                        error_msg += f"📋 Currently used identifiers:\n"
+                        error_msg += f"   🗂️ Containers: {', '.join(used_info['container_ids']) if used_info['container_ids'] else 'None'}\n"
+                        error_msg += f"   📊 Charts: {', '.join(used_info['chart_ids']) if used_info['chart_ids'] else 'None'}\n"
+                        error_msg += f"💡 Suggested alternatives: {', '.join(validation_result['suggestions'])}"
                         
-                        if (created_container['x'] != arguments['x'] or 
-                            created_container['y'] != arguments['y']):
-                            result_msg += f" (repositioned from {requested_pos} to {actual_pos} due to overlap prevention)"
-                        else:
-                            result_msg += f" {actual_pos}"
-                            
-                        if (created_container['width'] != arguments['width'] or 
-                            created_container['height'] != arguments['height']):
-                            result_msg += f" (resized from {requested_size} to {actual_size} due to auto-adjustment)"
-                        else:
-                            result_msg += f" {actual_size}"
-                
-                if not result:
-                    # Check if it's an ID conflict
-                    state = self.controller.get_current_state()
-                    existing_ids = [c['id'] for c in state.get('containers', [])]
-                    if arguments["container_id"] in existing_ids:
-                        result_msg = f"Failed to create container '{arguments['container_id']}'. Container ID already exists. Existing containers: {', '.join(existing_ids)}. Use get_canvas_state() to check current containers and choose a unique ID."
+                        return {
+                            "status": "error",
+                            "result": error_msg,
+                            "validation_details": validation_result,
+                            "function_name": function_name
+                        }
+                    
+                    # Use the cleaned identifier
+                    clean_container_id = validation_result["clean_id"]
+                    
+                    # Get canvas size for optimization
+                    canvas_size = self.controller.get_canvas_size()
+                    
+                    # Get all containers for optimization (existing + new)
+                    containers_for_optimization = self._get_all_containers_for_optimization(
+                        new_container_id=clean_container_id
+                    )
+                    
+                    # Calculate optimal layout
+                    optimization_result = self._calculate_optimal_container_layout(
+                        containers_for_optimization, 
+                        canvas_size['width'], 
+                        canvas_size['height']
+                    )
+                    
+                    # Apply optimized layout
+                    layout_application = self._apply_optimized_layout(
+                        optimization_result, 
+                        target_container_id=clean_container_id
+                    )
+                    
+                    if layout_application["success"] and layout_application["target_container"]["success"]:
+                        target_info = layout_application["target_container"]
+                        metrics = layout_application["metrics"]
+                        
+                        # Add identifier validation info if ID was cleaned
+                        id_info = f"'{clean_container_id}'"
+                        if clean_container_id != container_id:
+                            id_info += f" (cleaned from '{container_id}')"
+                        
+                        result_msg = f"✅ Container {id_info} created successfully using optimized layout:\n"
+                        result_msg += f"   📍 Position: {target_info['optimized_position']}\n"
+                        result_msg += f"   📏 Size: {target_info['optimized_size']}\n"
+                        result_msg += f"   🎯 Grid position: Row {target_info['grid_position']['row']}, Col {target_info['grid_position']['col']}\n"
+                        result_msg += f"   📊 Space utilization: {metrics['space_utilization_percent']}%\n"
+                        result_msg += f"   🔧 Layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
+                        result_msg += f"   💡 Optimization: {layout_application['layout_summary']}"
+                        
+                        # Add information about other containers that were repositioned
+                        repositioned_containers = [r for r in layout_application["container_results"] 
+                                                 if r["container_id"] != clean_container_id and r["status"] == "existing"]
+                        if repositioned_containers:
+                            result_msg += f"\n   🔄 Repositioned {len(repositioned_containers)} existing container(s) for optimal layout"
+                        
+                        # Add identifier validation warning if applicable
+                        if validation_result.get("warning"):
+                            result_msg += f"\n   ⚠️ {validation_result['warning']}"
+                        
+                        return {
+                            "status": "success",
+                            "result": result_msg,
+                            "optimization_used": True,
+                            "optimization_details": layout_application,
+                            "function_name": function_name
+                        }
                     else:
-                        result_msg = "Failed to create container due to unknown error."
-                
-                return {
-                    "status": "success" if result else "error",
-                    "result": result_msg if result else "Failed to create container",
-                    "function_name": function_name
-                }
+                        error_msg = layout_application.get("error", "Unknown optimization error")
+                        return {
+                            "status": "error",
+                            "result": f"Failed to create container '{clean_container_id}' with optimization: {error_msg}",
+                            "function_name": function_name
+                        }
+                        
+                except Exception as e:
+                    return {
+                        "status": "error",
+                        "result": f"Error creating container '{arguments.get('container_id', 'unknown')}': {str(e)}",
+                        "function_name": function_name
+                    }
             
             elif function_name == "delete_container":
-                result = self.controller.delete_container(arguments["container_id"])
-                
-                if result:
-                    result_msg = f"Container '{arguments['container_id']}' deleted successfully"
-                else:
-                    # Check if container exists to provide better error message
-                    state = self.controller.get_current_state()
-                    existing_ids = [c['id'] for c in state.get('containers', [])]
-                    if existing_ids:
-                        result_msg = f"Failed to delete container '{arguments['container_id']}'. Container not found. Available containers: {', '.join(existing_ids)}. Use get_canvas_state() to check current containers."
+                try:
+                    container_id = arguments["container_id"]
+                    
+                    # Check if container exists
+                    current_state = self.controller.get_current_state()
+                    existing_ids = [c['id'] for c in current_state.get('containers', [])]
+                    if container_id not in existing_ids:
+                        if existing_ids:
+                            return {
+                                "status": "error",
+                                "result": f"Failed to delete container '{container_id}'. Container not found. Available containers: {', '.join(existing_ids)}.",
+                                "function_name": function_name
+                            }
+                        else:
+                            return {
+                                "status": "error",
+                                "result": f"Failed to delete container '{container_id}'. No containers exist on canvas.",
+                                "function_name": function_name
+                            }
+                    
+                    # First delete the container
+                    delete_result = self.controller.delete_container(container_id)
+                    
+                    if not delete_result:
+                        return {
+                            "status": "error",
+                            "result": f"Failed to delete container '{container_id}' from canvas.",
+                            "function_name": function_name
+                        }
+                    
+                    # Get remaining containers after deletion
+                    remaining_state = self.controller.get_current_state()
+                    remaining_containers = remaining_state.get('containers', [])
+                    
+                    if len(remaining_containers) == 0:
+                        # No containers left, just report deletion
+                        return {
+                            "status": "success",
+                            "result": f"✅ Container '{container_id}' deleted successfully. Canvas is now empty.",
+                            "optimization_used": False,
+                            "function_name": function_name
+                        }
+                    
+                    # Re-optimize remaining containers
+                    canvas_size = self.controller.get_canvas_size()
+                    containers_for_optimization = self._get_all_containers_for_optimization()
+                    
+                    # Calculate optimal layout for remaining containers
+                    optimization_result = self._calculate_optimal_container_layout(
+                        containers_for_optimization, 
+                        canvas_size['width'], 
+                        canvas_size['height']
+                    )
+                    
+                    # Apply optimized layout to remaining containers
+                    layout_application = self._apply_optimized_layout(optimization_result)
+                    
+                    if layout_application["success"]:
+                        metrics = layout_application["metrics"]
+                        
+                        result_msg = f"✅ Container '{container_id}' deleted successfully and remaining containers optimized:\n"
+                        result_msg += f"   🗑️ Deleted: '{container_id}'\n"
+                        result_msg += f"   📊 Remaining containers: {len(remaining_containers)}\n"
+                        result_msg += f"   📊 Space utilization: {metrics['space_utilization_percent']}%\n"
+                        result_msg += f"   🔧 New layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
+                        result_msg += f"   💡 Optimization: {layout_application['layout_summary']}"
+                        
+                        # Add information about repositioned containers
+                        repositioned_containers = layout_application["container_results"]
+                        if repositioned_containers:
+                            result_msg += f"\n   🔄 Repositioned {len(repositioned_containers)} remaining container(s) for optimal layout"
+                        
+                        return {
+                            "status": "success",
+                            "result": result_msg,
+                            "optimization_used": True,
+                            "optimization_details": layout_application,
+                            "function_name": function_name
+                        }
                     else:
-                        result_msg = f"Failed to delete container '{arguments['container_id']}'. No containers exist on canvas. Use get_canvas_state() to verify canvas state."
-                
-                return {
-                    "status": "success" if result else "error",
-                    "result": result_msg,
-                    "function_name": function_name
-                }
+                        # Deletion succeeded but optimization failed
+                        return {
+                            "status": "success",
+                            "result": f"✅ Container '{container_id}' deleted successfully, but failed to optimize remaining containers.",
+                            "optimization_used": False,
+                            "function_name": function_name
+                        }
+                        
+                except Exception as e:
+                    return {
+                        "status": "error",
+                        "result": f"Error deleting container '{arguments.get('container_id', 'unknown')}': {str(e)}",
+                        "function_name": function_name
+                    }
             
             elif function_name == "modify_container":
-                result = self.controller.modify_container(
-                    container_id=arguments["container_id"],
-                    x=arguments["x"],
-                    y=arguments["y"],
-                    width=arguments["width"],
-                    height=arguments["height"],
-                    auto_adjust=self.chatbot.auto_adjust_enabled,
-                    avoid_overlap=self.chatbot.overlap_prevention_enabled
-                )
-                
-                if result:
-                    # Get the actual final state to report any adjustments
-                    state = self.controller.get_current_state()
-                    modified_container = None
-                    for container in state.get('containers', []):
-                        if container['id'] == arguments["container_id"]:
-                            modified_container = container
-                            break
+                try:
+                    container_id = arguments["container_id"]
                     
-                    result_msg = f"Container '{arguments['container_id']}' modified successfully"
-                    if modified_container:
-                        actual_pos = f"to ({modified_container['x']}, {modified_container['y']})"
-                        actual_size = f"with size {modified_container['width']}x{modified_container['height']}"
-                        requested_pos = f"({arguments['x']}, {arguments['y']})"
-                        requested_size = f"{arguments['width']}x{arguments['height']}"
-                        
-                        if (modified_container['x'] != arguments['x'] or 
-                            modified_container['y'] != arguments['y']):
-                            result_msg += f" (repositioned from requested {requested_pos} to {actual_pos} due to overlap prevention)"
+                    # Check if container exists
+                    current_state = self.controller.get_current_state()
+                    existing_ids = [c['id'] for c in current_state.get('containers', [])]
+                    if container_id not in existing_ids:
+                        if existing_ids:
+                            return {
+                                "status": "error",
+                                "result": f"Failed to modify container '{container_id}'. Container not found. Available containers: {', '.join(existing_ids)}.",
+                                "function_name": function_name
+                            }
                         else:
-                            result_msg += f" {actual_pos}"
-                            
-                        if (modified_container['width'] != arguments['width'] or 
-                            modified_container['height'] != arguments['height']):
-                            result_msg += f" (resized from requested {requested_size} to {actual_size} due to auto-adjustment)"
-                        else:
-                            result_msg += f" {actual_size}"
+                            return {
+                                "status": "error",
+                                "result": f"Failed to modify container '{container_id}'. No containers exist on canvas.",
+                                "function_name": function_name
+                            }
+                    
+                    # Get canvas size for optimization
+                    canvas_size = self.controller.get_canvas_size()
+                    
+                    # Get all containers for optimization (all existing, including the one being modified)
+                    containers_for_optimization = self._get_all_containers_for_optimization()
+                    
+                    # Calculate optimal layout
+                    optimization_result = self._calculate_optimal_container_layout(
+                        containers_for_optimization, 
+                        canvas_size['width'], 
+                        canvas_size['height']
+                    )
+                    
+                    # Apply optimized layout
+                    layout_application = self._apply_optimized_layout(
+                        optimization_result, 
+                        target_container_id=container_id
+                    )
+                    
+                    if layout_application["success"] and layout_application["target_container"]["success"]:
+                        target_info = layout_application["target_container"]
+                        metrics = layout_application["metrics"]
                         
-                        # Refresh any pie charts in the modified container (auto-adapts to new size)
-                        pie_chart_refreshed = self._refresh_pie_chart_in_container(arguments["container_id"])
+                        result_msg = f"✅ Container '{container_id}' modified successfully using optimized layout:\n"
+                        result_msg += f"   📍 New position: {target_info['optimized_position']}\n"
+                        result_msg += f"   📏 New size: {target_info['optimized_size']}\n"
+                        result_msg += f"   🎯 Grid position: Row {target_info['grid_position']['row']}, Col {target_info['grid_position']['col']}\n"
+                        result_msg += f"   📊 Space utilization: {metrics['space_utilization_percent']}%\n"
+                        result_msg += f"   🔧 Layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
+                        result_msg += f"   💡 Optimization: {layout_application['layout_summary']}"
+                        
+                        # Show previous vs new dimensions
+                        if target_info.get("previous_position") and target_info.get("previous_size"):
+                            result_msg += f"\n   📋 Previous: {target_info['previous_position']} size {target_info['previous_size']}"
+                            if target_info.get("size_change_pixels", 0) > 0:
+                                result_msg += f"\n   📏 Size change: {target_info['size_change_pixels']} pixels"
+                        
+                        # Add information about other containers that were repositioned
+                        repositioned_containers = [r for r in layout_application["container_results"] 
+                                                 if r["container_id"] != container_id and r["status"] == "existing"]
+                        if repositioned_containers:
+                            result_msg += f"\n   🔄 Repositioned {len(repositioned_containers)} other container(s) for optimal layout"
+                        
+                        # Refresh any pie charts in the modified container
+                        pie_chart_refreshed = self._refresh_pie_chart_in_container(container_id)
                         if pie_chart_refreshed:
-                            result_msg += " (pie chart automatically adapted to new container dimensions)"
-                else:
-                    # Check if container exists to provide better error message
-                    state = self.controller.get_current_state()
-                    existing_ids = [c['id'] for c in state.get('containers', [])]
-                    if existing_ids:
-                        result_msg = f"Failed to modify container '{arguments['container_id']}'. Container not found. Available containers: {', '.join(existing_ids)}. Use get_canvas_state() to check current containers."
+                            result_msg += "\n   🥧 Pie chart automatically adapted to new container dimensions"
+                        
+                        return {
+                            "status": "success",
+                            "result": result_msg,
+                            "optimization_used": True,
+                            "optimization_details": layout_application,
+                            "function_name": function_name
+                        }
                     else:
-                        result_msg = f"Failed to modify container '{arguments['container_id']}'. No containers exist on canvas. Use get_canvas_state() to verify canvas state."
-                
-                return {
-                    "status": "success" if result else "error",
-                    "result": result_msg if result else f"Failed to modify container '{arguments['container_id']}'",
-                    "function_name": function_name
-                }
+                        error_msg = layout_application.get("error", "Unknown optimization error")
+                        return {
+                            "status": "error",
+                            "result": f"Failed to modify container '{container_id}' with optimization: {error_msg}",
+                            "function_name": function_name
+                        }
+                        
+                except Exception as e:
+                    return {
+                        "status": "error",
+                        "result": f"Error modifying container '{arguments.get('container_id', 'unknown')}': {str(e)}",
+                        "function_name": function_name
+                    }
             
             elif function_name == "get_canvas_state":
                 state = self.controller.get_current_state()
@@ -794,6 +1410,19 @@ class CanvasFunctionExecutor:
                     container_id = arguments["container_id"]
                     title = arguments.get("title", "Pie Chart")
                     use_sample_data = arguments.get("use_sample_data", True)
+                    
+                    # GUARDRAIL: Validate chart title as identifier (if it will be used as ID)
+                    import re
+                    chart_id = re.sub(r'[^a-zA-Z0-9]', '_', title).lower() if title else "pie_chart"
+                    chart_validation = self._validate_identifier_uniqueness(chart_id, "chart")
+                    
+                    # Note: We don't block chart creation for ID conflicts since charts are content within containers
+                    # But we warn the LLM about potential confusion
+                    chart_id_warning = None
+                    if not chart_validation["is_valid"]:
+                        chart_id_warning = f"⚠️ Chart identifier '{chart_id}' conflicts with existing elements. Consider using a different title."
+                    elif chart_validation.get("warning"):
+                        chart_id_warning = f"⚠️ {chart_validation['warning']}"
                     
                     # Check if container exists and get its dimensions
                     state = self.controller.get_current_state()
@@ -969,6 +1598,10 @@ class CanvasFunctionExecutor:
                         result_msg = f"Pie chart '{title}' created successfully in container '{container_id}' using {data_source}"
                         if not use_sample_data:
                             result_msg += f" with {len(labels)} segments"
+                        
+                        # Add chart identifier warning if applicable
+                        if chart_id_warning:
+                            result_msg += f"\n{chart_id_warning}"
                     else:
                         # Get more detailed error information
                         error_info = self.controller.driver.execute_script("""
@@ -1115,13 +1748,91 @@ class CanvasFunctionExecutor:
                         "function_name": function_name
                     }
             
+            elif function_name == "calculate_optimal_layout":
+                try:
+                    containers = arguments["containers"]
+                    canvas_width = arguments["canvas_width"]
+                    canvas_height = arguments["canvas_height"]
+                    
+                    # Calculate optimal layout using space optimization algorithm
+                    layout_result = self._calculate_optimal_container_layout(
+                        containers, canvas_width, canvas_height
+                    )
+                    
+                    return {
+                        "status": "success",
+                        "result": layout_result,
+                        "function_name": function_name
+                    }
+                    
+                except Exception as e:
+                    return {
+                        "status": "error",
+                        "result": f"Error calculating optimal layout: {str(e)}",
+                        "function_name": function_name
+                    }
+            
+            elif function_name == "check_identifier_availability":
+                try:
+                    proposed_id = arguments["proposed_identifier"]
+                    element_type = arguments.get("element_type", "element")
+                    
+                    # Validate the identifier
+                    validation_result = self._validate_identifier_uniqueness(proposed_id, element_type)
+                    used_info = validation_result["used_identifiers"]
+                    
+                    if validation_result["is_valid"]:
+                        if validation_result.get("warning"):
+                            # Valid but with warning
+                            result_msg = f"✅ Identifier '{validation_result['clean_id']}' is available but has a warning:\n"
+                            result_msg += f"   ⚠️ {validation_result['warning']}\n"
+                        else:
+                            # Completely valid
+                            result_msg = f"✅ Identifier '{validation_result['clean_id']}' is available and unique!\n"
+                        
+                        if validation_result['clean_id'] != proposed_id:
+                            result_msg += f"   🔧 Cleaned from '{proposed_id}' to '{validation_result['clean_id']}'\n"
+                        
+                        result_msg += f"📋 Current usage: {used_info['summary']}"
+                        
+                        return {
+                            "status": "success",
+                            "result": result_msg,
+                            "validation_details": validation_result,
+                            "function_name": function_name
+                        }
+                    else:
+                        # Invalid - conflicts found
+                        result_msg = f"❌ Identifier '{proposed_id}' is NOT available:\n"
+                        result_msg += f"   🚫 {validation_result['error']}\n"
+                        result_msg += f"📋 Currently used identifiers:\n"
+                        result_msg += f"   🗂️ Containers: {', '.join(used_info['container_ids']) if used_info['container_ids'] else 'None'}\n"
+                        result_msg += f"   📊 Charts: {', '.join(used_info['chart_ids']) if used_info['chart_ids'] else 'None'}\n"
+                        result_msg += f"💡 Suggested alternatives: {', '.join(validation_result['suggestions'])}"
+                        
+                        return {
+                            "status": "error",
+                            "result": result_msg,
+                            "validation_details": validation_result,
+                            "function_name": function_name
+                        }
+                        
+                except Exception as e:
+                    return {
+                        "status": "error",
+                        "result": f"Error checking identifier availability: {str(e)}",
+                        "function_name": function_name
+                    }
+            
             else:
                 return {
                     "status": "error",
                     "error": f"Unknown function: {function_name}",
                     "available_functions": ["create_container", "delete_container", "modify_container", 
                                           "get_canvas_state", "clear_canvas", "take_screenshot", 
-                                          "get_canvas_size", "edit_canvas_size", "create_pie_chart", "get_canvas_settings"]
+                                          "get_canvas_size", "edit_canvas_size", "create_pie_chart", 
+                                          "get_canvas_settings", "check_container_content", "calculate_optimal_layout",
+                                          "check_identifier_availability"]
                 }
                 
         except Exception as e:
@@ -1151,7 +1862,7 @@ class CanvasChatbot:
         
         # Canvas behavior settings that LLM can control
         self.auto_adjust_enabled = True
-        self.overlap_prevention_enabled = True
+        self.overlap_prevention_enabled = False
         
     def initialize(self):
         """Initialize all components"""
@@ -1201,7 +1912,7 @@ class CanvasChatbot:
         })
         
         function_calls_made = 0
-        max_iterations = 50  # Prevent infinite loops
+        max_iterations = 5  # Prevent infinite loops
         iteration_count = 0
         
         while iteration_count < max_iterations:
@@ -1294,8 +2005,8 @@ class CanvasChatbot:
                 
                 function_calls_made += 1
                 
-                # Check if we should prompt user to continue after 25 calls
-                if function_calls_made >= 25:
+                # Check if we should prompt user to continue after 5 calls
+                if function_calls_made >= 5:
                     print(f"\n⚠️ Made {function_calls_made} function calls.")
                     continue_choice = input("🤔 Continue with more function calls? (y/N): ").strip().lower()
                     if continue_choice != 'y':
