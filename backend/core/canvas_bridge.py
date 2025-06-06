@@ -256,7 +256,7 @@ class CanvasBridge:
                 raise ValueError("Container ID must be a non-empty string")
             
             if container_id in self.canvas_state["containers"]:
-                print(f"❌ Container '{container_id}' already exists")
+                print(f"[ERROR] Container '{container_id}' already exists")
                 return False
             
             if not all(isinstance(val, (int, float)) and val >= 0 for val in [x, y, width, height]):
@@ -308,7 +308,7 @@ class CanvasBridge:
                     adjusted = True
                 
                 if adjusted:
-                    print(f"🔧 Container auto-adjusted to fit within canvas bounds ({canvas_width}x{canvas_height})")
+                    print(f"[CONFIG] Container auto-adjusted to fit within canvas bounds ({canvas_width}x{canvas_height})")
             
             # Check for overlaps and find non-overlapping position if needed
             if avoid_overlap and existing_containers:
@@ -335,8 +335,8 @@ class CanvasBridge:
                             print(f"🔄 Found non-overlapping position: ({x}, {y}) → ({new_x}, {new_y})")
                             x, y = new_x, new_y
                     else:
-                        print(f"❌ No space available for container of size {width}x{height}")
-                        print(f"❌ Cannot create container without overlapping - rejecting creation")
+                        print(f"[ERROR] No space available for container of size {width}x{height}")
+                        print(f"[ERROR] Cannot create container without overlapping - rejecting creation")
                         return False
             
             # Create container in state
@@ -364,18 +364,18 @@ class CanvasBridge:
                 }
             })
             
-            print(f"✅ Container '{container_id}' created at ({x}, {y}) with size {width}x{height}")
+            print(f"[SUCCESS] Container '{container_id}' created at ({x}, {y}) with size {width}x{height}")
             return True
             
         except Exception as e:
-            print(f"❌ Error creating container: {e}")
+            print(f"[ERROR] Error creating container: {e}")
             return False
     
     async def delete_container(self, container_id: str) -> bool:
         """Delete a container from the canvas"""
         try:
             if container_id not in self.canvas_state["containers"]:
-                print(f"❌ Container '{container_id}' not found")
+                print(f"[ERROR] Container '{container_id}' not found")
                 return False
             
             # Remove from state
@@ -391,11 +391,11 @@ class CanvasBridge:
                 }
             })
             
-            print(f"✅ Container '{container_id}' deleted successfully")
+            print(f"[SUCCESS] Container '{container_id}' deleted successfully")
             return True
             
         except Exception as e:
-            print(f"❌ Error deleting container: {e}")
+            print(f"[ERROR] Error deleting container: {e}")
             return False
     
     async def modify_container(self, container_id: str, x: int, y: int, width: int, height: int,
@@ -403,7 +403,7 @@ class CanvasBridge:
         """Modify an existing container's position and size"""
         try:
             if container_id not in self.canvas_state["containers"]:
-                print(f"❌ Container '{container_id}' not found")
+                print(f"[ERROR] Container '{container_id}' not found")
                 return False
             
             # Similar logic to create_container but for modification
@@ -445,7 +445,7 @@ class CanvasBridge:
                     if new_x is not None and new_y is not None:
                         x, y = new_x, new_y
                     else:
-                        print(f"❌ No space available for container modification")
+                        print(f"[ERROR] No space available for container modification")
                         return False
             
             # Update container in state
@@ -472,11 +472,11 @@ class CanvasBridge:
                 }
             })
             
-            print(f"✅ Container '{container_id}' modified to pos({x}, {y}) size({width}x{height})")
+            print(f"[SUCCESS] Container '{container_id}' modified to pos({x}, {y}) size({width}x{height})")
             return True
             
         except Exception as e:
-            print(f"❌ Error modifying container: {e}")
+            print(f"[ERROR] Error modifying container: {e}")
             return False
     
     async def clear_canvas(self) -> bool:
@@ -503,7 +503,7 @@ class CanvasBridge:
             return True
             
         except Exception as e:
-            print(f"❌ Error clearing canvas: {e}")
+            print(f"[ERROR] Error clearing canvas: {e}")
             return False
     
     async def take_screenshot(self, filename: str = None) -> str:
@@ -527,7 +527,7 @@ class CanvasBridge:
             return filename
             
         except Exception as e:
-            print(f"❌ Error taking screenshot: {e}")
+            print(f"[ERROR] Error taking screenshot: {e}")
             return None
 
 

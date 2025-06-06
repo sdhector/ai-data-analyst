@@ -63,7 +63,7 @@ async def chat_endpoint(chat_message: ChatMessage):
         return ChatResponse(**response)
         
     except Exception as e:
-        print(f"❌ Error in chat endpoint: {e}")
+        print(f"[ERROR] Error in chat endpoint: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing message: {str(e)}")
 
 
@@ -77,7 +77,7 @@ async def get_canvas_state():
         return CanvasState(**state)
         
     except Exception as e:
-        print(f"❌ Error getting canvas state: {e}")
+        print(f"[ERROR] Error getting canvas state: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting canvas state: {str(e)}")
 
 
@@ -95,7 +95,7 @@ async def get_canvas_size():
         }
         
     except Exception as e:
-        print(f"❌ Error getting canvas size: {e}")
+        print(f"[ERROR] Error getting canvas size: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting canvas size: {str(e)}")
 
 
@@ -117,7 +117,7 @@ async def clear_canvas():
             raise HTTPException(status_code=500, detail="Failed to clear canvas")
             
     except Exception as e:
-        print(f"❌ Error clearing canvas: {e}")
+        print(f"[ERROR] Error clearing canvas: {e}")
         raise HTTPException(status_code=500, detail=f"Error clearing canvas: {str(e)}")
 
 
@@ -134,7 +134,7 @@ async def get_help():
         }
         
     except Exception as e:
-        print(f"❌ Error getting help: {e}")
+        print(f"[ERROR] Error getting help: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting help: {str(e)}")
 
 
@@ -152,7 +152,7 @@ async def get_conversation_history():
         }
         
     except Exception as e:
-        print(f"❌ Error getting conversation history: {e}")
+        print(f"[ERROR] Error getting conversation history: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting conversation history: {str(e)}")
 
 
@@ -170,7 +170,7 @@ async def clear_conversation():
         }
         
     except Exception as e:
-        print(f"❌ Error clearing conversation: {e}")
+        print(f"[ERROR] Error clearing conversation: {e}")
         raise HTTPException(status_code=500, detail=f"Error clearing conversation: {str(e)}")
 
 
@@ -201,7 +201,7 @@ async def get_status():
         }
         
     except Exception as e:
-        print(f"❌ Error getting status: {e}")
+        print(f"[ERROR] Error getting status: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting status: {str(e)}")
 
 
@@ -252,7 +252,7 @@ async def create_container_direct(container_data: ContainerCreate):
             raise HTTPException(status_code=400, detail="Failed to create container")
             
     except Exception as e:
-        print(f"❌ Error creating container: {e}")
+        print(f"[ERROR] Error creating container: {e}")
         raise HTTPException(status_code=500, detail=f"Error creating container: {str(e)}")
 
 
@@ -275,7 +275,7 @@ async def delete_container_direct(container_id: str):
             raise HTTPException(status_code=404, detail=f"Container '{container_id}' not found")
             
     except Exception as e:
-        print(f"❌ Error deleting container: {e}")
+        print(f"[ERROR] Error deleting container: {e}")
         raise HTTPException(status_code=500, detail=f"Error deleting container: {str(e)}")
 
 
@@ -306,7 +306,7 @@ async def modify_container_direct(container_id: str, container_data: ContainerMo
             raise HTTPException(status_code=404, detail=f"Container '{container_id}' not found")
             
     except Exception as e:
-        print(f"❌ Error modifying container: {e}")
+        print(f"[ERROR] Error modifying container: {e}")
         raise HTTPException(status_code=500, detail=f"Error modifying container: {str(e)}")
 
 
@@ -330,5 +330,5 @@ async def get_container_info(container_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error getting container info: {e}")
+        print(f"[ERROR] Error getting container info: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting container info: {str(e)}") 

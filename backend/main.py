@@ -23,7 +23,7 @@ try:
     from fastapi.middleware.cors import CORSMiddleware
     import uvicorn
 except ImportError:
-    print("❌ FastAPI not installed. Install with: pip install fastapi uvicorn websockets")
+    print("[ERROR] FastAPI not installed. Install with: pip install fastapi uvicorn websockets")
     sys.exit(1)
 
 # Core imports
@@ -68,7 +68,7 @@ class AIDataAnalystServer:
         self.setup_routes()
         self.setup_static_files()
         
-        print("🚀 AI Data Analyst v0.1 Server initialized")
+        print("[STARTING] AI Data Analyst v0.1 Server initialized")
     
     def setup_routes(self):
         """Setup API routes and WebSocket endpoints"""
@@ -109,9 +109,9 @@ class AIDataAnalystServer:
             """Serve the main frontend page"""
             frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
             
-            print(f"🔍 Looking for frontend at: {frontend_path}")
-            print(f"🔍 Frontend exists: {frontend_path.exists()}")
-            print(f"🔍 Current working directory: {Path.cwd()}")
+            print(f"[SEARCH] Looking for frontend at: {frontend_path}")
+            print(f"[SEARCH] Frontend exists: {frontend_path.exists()}")
+            print(f"[SEARCH] Current working directory: {Path.cwd()}")
             
             if not frontend_path.exists():
                 raise HTTPException(status_code=404, detail=f"Frontend not found at {frontend_path}")
@@ -122,8 +122,8 @@ class AIDataAnalystServer:
         """Setup static file serving for the frontend"""
         frontend_dir = Path(__file__).parent.parent / "frontend"
         
-        print(f"🔍 Setting up static files from: {frontend_dir}")
-        print(f"🔍 Frontend directory exists: {frontend_dir.exists()}")
+        print(f"[SEARCH] Setting up static files from: {frontend_dir}")
+        print(f"[SEARCH] Frontend directory exists: {frontend_dir.exists()}")
         
         if frontend_dir.exists():
             # Mount the frontend directory as static files
@@ -133,7 +133,7 @@ class AIDataAnalystServer:
             @self.app.get("/styles.css")
             async def serve_css():
                 css_path = frontend_dir / "styles.css"
-                print(f"🔍 Serving CSS from: {css_path}")
+                print(f"[SEARCH] Serving CSS from: {css_path}")
                 if css_path.exists():
                     return FileResponse(css_path, media_type="text/css")
                 raise HTTPException(status_code=404, detail=f"CSS file not found at {css_path}")
@@ -141,14 +141,14 @@ class AIDataAnalystServer:
             @self.app.get("/script.js")
             async def serve_js():
                 js_path = frontend_dir / "script.js"
-                print(f"🔍 Serving JS from: {js_path}")
+                print(f"[SEARCH] Serving JS from: {js_path}")
                 if js_path.exists():
                     return FileResponse(js_path, media_type="application/javascript")
                 raise HTTPException(status_code=404, detail=f"JavaScript file not found at {js_path}")
             
-            print(f"✅ Frontend static files mounted from: {frontend_dir}")
+            print(f"[SUCCESS] Frontend static files mounted from: {frontend_dir}")
         else:
-            print(f"⚠️ Frontend directory not found: {frontend_dir}")
+            print(f"[WARNING] Frontend directory not found: {frontend_dir}")
     
     def run(self, host: str = "127.0.0.1", port: int = 8000, reload: bool = False):
         """Run the server"""
@@ -160,7 +160,7 @@ class AIDataAnalystServer:
         
         # Check for OpenAI API key
         if not os.getenv("OPENAI_API_KEY"):
-            print("⚠️ Warning: OPENAI_API_KEY environment variable not set.")
+            print("[WARNING] Warning: OPENAI_API_KEY environment variable not set.")
             print("   The chatbot will not function without an OpenAI API key.")
             print("   Set it in your environment or .env file.")
         
@@ -175,7 +175,7 @@ class AIDataAnalystServer:
         except KeyboardInterrupt:
             print("\n🛑 Server stopped by user")
         except Exception as e:
-            print(f"❌ Server error: {e}")
+            print(f"[ERROR] Server error: {e}")
 
 
 # Create the FastAPI app instance
@@ -187,15 +187,15 @@ app = server.app
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    print("🔧 Initializing AI Data Analyst v0.1...")
+    print("[CONFIG] Initializing AI Data Analyst v0.1...")
     
     # Check if chatbot is properly initialized
     if chatbot.llm_client is None:
-        print("⚠️ Warning: LLM client not initialized. Check OpenAI API key.")
+        print("[WARNING] Warning: LLM client not initialized. Check OpenAI API key.")
     else:
-        print("✅ Chatbot initialized successfully")
+        print("[SUCCESS] Chatbot initialized successfully")
     
-    print("✅ AI Data Analyst v0.1 ready!")
+    print("[SUCCESS] AI Data Analyst v0.1 ready!")
 
 
 # Shutdown event
@@ -210,7 +210,7 @@ async def shutdown_event():
     # Clear canvas state
     await canvas_bridge.clear_canvas()
     
-    print("✅ Shutdown complete")
+    print("[SUCCESS] Shutdown complete")
 
 
 def main():

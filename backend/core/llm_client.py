@@ -8,12 +8,13 @@ Based on the proven implementation from tests/python/llm_canvas_chatbot.py.
 
 import json
 import os
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file in root directory
+load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
 
 
 class CanvasLLMClient:
