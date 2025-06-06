@@ -60,7 +60,7 @@ class CanvasFunctionExecutor:
             }
             
         except Exception as e:
-            print(f"⚠️ Warning: Error getting used identifiers: {e}")
+            print(f"[WARNING] Warning: Error getting used identifiers: {e}")
             return {
                 "container_ids": [],
                 "chart_ids": [],
@@ -314,7 +314,7 @@ class CanvasFunctionExecutor:
         Returns:
             Function execution result
         """
-        print(f"🔧 EXECUTING: {function_name}({arguments})")
+        print(f"[CONFIG] EXECUTING: {function_name}({arguments})")
         
         try:
             if function_name == "create_container":
@@ -326,11 +326,11 @@ class CanvasFunctionExecutor:
                     
                     if not validation_result["is_valid"]:
                         used_info = validation_result["used_identifiers"]
-                        error_msg = f"❌ {validation_result['error']}\n"
+                        error_msg = f"[ERROR] {validation_result['error']}\n"
                         error_msg += f"📋 Currently used identifiers:\n"
                         error_msg += f"   🗂️ Containers: {', '.join(used_info['container_ids']) if used_info['container_ids'] else 'None'}\n"
-                        error_msg += f"   📊 Charts: {', '.join(used_info['chart_ids']) if used_info['chart_ids'] else 'None'}\n"
-                        error_msg += f"💡 Suggested alternatives: {', '.join(validation_result['suggestions'])}"
+                        error_msg += f"   [CHART] Charts: {', '.join(used_info['chart_ids']) if used_info['chart_ids'] else 'None'}\n"
+                        error_msg += f"[INFO] Suggested alternatives: {', '.join(validation_result['suggestions'])}"
                         
                         return {
                             "status": "error",
@@ -372,13 +372,13 @@ class CanvasFunctionExecutor:
                         if clean_container_id != container_id:
                             id_info += f" (cleaned from '{container_id}')"
                         
-                        result_msg = f"✅ Container {id_info} created successfully using optimized layout:\n"
+                        result_msg = f"[SUCCESS] Container {id_info} created successfully using optimized layout:\n"
                         result_msg += f"   📍 Position: {target_info['optimized_position']}\n"
                         result_msg += f"   📏 Size: {target_info['optimized_size']}\n"
-                        result_msg += f"   🎯 Grid position: Row {target_info['grid_position']['row']}, Col {target_info['grid_position']['col']}\n"
-                        result_msg += f"   📊 Space utilization: {metrics['space_utilization_percent']}%\n"
-                        result_msg += f"   🔧 Layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
-                        result_msg += f"   💡 Optimization: {layout_application['layout_summary']}"
+                        result_msg += f"   [TARGET] Grid position: Row {target_info['grid_position']['row']}, Col {target_info['grid_position']['col']}\n"
+                        result_msg += f"   [CHART] Space utilization: {metrics['space_utilization_percent']}%\n"
+                        result_msg += f"   [CONFIG] Layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
+                        result_msg += f"   [INFO] Optimization: {layout_application['layout_summary']}"
                         
                         # Add information about other containers that were repositioned
                         repositioned_containers = [r for r in layout_application["container_results"] 
@@ -388,7 +388,7 @@ class CanvasFunctionExecutor:
                         
                         # Add identifier validation warning if applicable
                         if validation_result.get("warning"):
-                            result_msg += f"\n   ⚠️ {validation_result['warning']}"
+                            result_msg += f"\n   [WARNING] {validation_result['warning']}"
                         
                         return {
                             "status": "success",
@@ -451,7 +451,7 @@ class CanvasFunctionExecutor:
                         # No containers left, just report deletion
                         return {
                             "status": "success",
-                            "result": f"✅ Container '{container_id}' deleted successfully. Canvas is now empty.",
+                            "result": f"[SUCCESS] Container '{container_id}' deleted successfully. Canvas is now empty.",
                             "optimization_used": False,
                             "function_name": function_name
                         }
@@ -473,12 +473,12 @@ class CanvasFunctionExecutor:
                     if layout_application["success"]:
                         metrics = layout_application["metrics"]
                         
-                        result_msg = f"✅ Container '{container_id}' deleted successfully and remaining containers optimized:\n"
+                        result_msg = f"[SUCCESS] Container '{container_id}' deleted successfully and remaining containers optimized:\n"
                         result_msg += f"   🗑️ Deleted: '{container_id}'\n"
-                        result_msg += f"   📊 Remaining containers: {len(remaining_containers)}\n"
-                        result_msg += f"   📊 Space utilization: {metrics['space_utilization_percent']}%\n"
-                        result_msg += f"   🔧 New layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
-                        result_msg += f"   💡 Optimization: {layout_application['layout_summary']}"
+                        result_msg += f"   [CHART] Remaining containers: {len(remaining_containers)}\n"
+                        result_msg += f"   [CHART] Space utilization: {metrics['space_utilization_percent']}%\n"
+                        result_msg += f"   [CONFIG] New layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
+                        result_msg += f"   [INFO] Optimization: {layout_application['layout_summary']}"
                         
                         # Add information about repositioned containers
                         repositioned_containers = layout_application["container_results"]
@@ -496,7 +496,7 @@ class CanvasFunctionExecutor:
                         # Deletion succeeded but optimization failed
                         return {
                             "status": "success",
-                            "result": f"✅ Container '{container_id}' deleted successfully, but failed to optimize remaining containers.",
+                            "result": f"[SUCCESS] Container '{container_id}' deleted successfully, but failed to optimize remaining containers.",
                             "optimization_used": False,
                             "function_name": function_name
                         }
@@ -554,13 +554,13 @@ class CanvasFunctionExecutor:
                         if target_info and target_info.get("success"):
                             metrics = layout_application["metrics"]
                             
-                            result_msg = f"✅ Container '{container_id}' modified successfully using optimized layout:\n"
+                            result_msg = f"[SUCCESS] Container '{container_id}' modified successfully using optimized layout:\n"
                             result_msg += f"   📍 New position: {target_info['optimized_position']}\n"
                             result_msg += f"   📏 New size: {target_info['optimized_size']}\n"
-                            result_msg += f"   🎯 Grid position: Row {target_info['grid_position']['row']}, Col {target_info['grid_position']['col']}\n"
-                            result_msg += f"   📊 Space utilization: {metrics['space_utilization_percent']}%\n"
-                            result_msg += f"   🔧 Layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
-                            result_msg += f"   💡 Optimization: {layout_application['layout_summary']}"
+                            result_msg += f"   [TARGET] Grid position: Row {target_info['grid_position']['row']}, Col {target_info['grid_position']['col']}\n"
+                            result_msg += f"   [CHART] Space utilization: {metrics['space_utilization_percent']}%\n"
+                            result_msg += f"   [CONFIG] Layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
+                            result_msg += f"   [INFO] Optimization: {layout_application['layout_summary']}"
                             
                             # Show previous vs new dimensions
                             if target_info.get("previous_position") and target_info.get("previous_size"):
@@ -723,7 +723,7 @@ class CanvasFunctionExecutor:
                     })
                     
                     # Prepare result message
-                    result_msg = f"✅ Canvas resized from {current_size['width']}x{current_size['height']} to {new_width}x{new_height} pixels"
+                    result_msg = f"[SUCCESS] Canvas resized from {current_size['width']}x{current_size['height']} to {new_width}x{new_height} pixels"
                     
                     # If there are containers, optimize their layout for the new canvas size
                     if containers:
@@ -744,11 +744,11 @@ class CanvasFunctionExecutor:
                             if layout_application["success"]:
                                 metrics = layout_application["metrics"]
                                 
-                                result_msg += f"\n🔧 **Container Optimization Applied:**"
-                                result_msg += f"\n   📊 Optimized {len(containers)} container(s) for new canvas size"
+                                result_msg += f"\n[CONFIG] **Container Optimization Applied:**"
+                                result_msg += f"\n   [CHART] Optimized {len(containers)} container(s) for new canvas size"
                                 result_msg += f"\n   📏 New layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers"
                                 result_msg += f"\n   📈 Space utilization: {metrics['space_utilization_percent']}%"
-                                result_msg += f"\n   💡 Layout strategy: {layout_application['layout_summary']}"
+                                result_msg += f"\n   [INFO] Layout strategy: {layout_application['layout_summary']}"
                                 
                                 # Show details about container adjustments
                                 repositioned_containers = layout_application["container_results"]
@@ -782,11 +782,11 @@ class CanvasFunctionExecutor:
                                 error_msg = layout_application.get("error", "Unknown optimization error")
                                 failed_ops = layout_application.get("failed_operations", [])
                                 
-                                result_msg += f"\n⚠️ **Container optimization failed:** {error_msg}"
+                                result_msg += f"\n[WARNING] **Container optimization failed:** {error_msg}"
                                 if failed_ops:
                                     failed_ids = [op["container_id"] for op in failed_ops]
-                                    result_msg += f"\n   ❌ Failed to optimize containers: {', '.join(failed_ids)}"
-                                result_msg += f"\n   💡 Containers may need manual adjustment for the new canvas size"
+                                    result_msg += f"\n   [ERROR] Failed to optimize containers: {', '.join(failed_ids)}"
+                                result_msg += f"\n   [INFO] Containers may need manual adjustment for the new canvas size"
                                 
                                 return {
                                     "status": "success",
@@ -799,8 +799,8 @@ class CanvasFunctionExecutor:
                                 
                         except Exception as optimization_error:
                             # Canvas resized but optimization crashed
-                            result_msg += f"\n⚠️ **Container optimization error:** {str(optimization_error)}"
-                            result_msg += f"\n   💡 Canvas resized successfully, but containers may need manual adjustment"
+                            result_msg += f"\n[WARNING] **Container optimization error:** {str(optimization_error)}"
+                            result_msg += f"\n   [INFO] Canvas resized successfully, but containers may need manual adjustment"
                             
                             return {
                                 "status": "success",
@@ -812,7 +812,7 @@ class CanvasFunctionExecutor:
                             }
                     else:
                         # No containers to optimize
-                        result_msg += f"\n📝 No containers to optimize"
+                        result_msg += f"\n[NOTE] No containers to optimize"
                         
                         return {
                             "status": "success",

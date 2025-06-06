@@ -42,10 +42,10 @@ class CanvasChatbot:
             # Initialize function executor
             self.function_executor = CanvasFunctionExecutor(self)
             
-            print("✅ Chatbot components initialized successfully!")
+            print("[SUCCESS] Chatbot components initialized successfully!")
             
         except Exception as e:
-            print(f"❌ Failed to initialize chatbot components: {e}")
+            print(f"[ERROR] Failed to initialize chatbot components: {e}")
             raise
     
     async def process_user_message(self, user_message: str, conversation_id: str = None, allow_extended_iterations: bool = False) -> Dict[str, Any]:
@@ -99,7 +99,7 @@ class CanvasChatbot:
                 if response["status"] != "success":
                     return {
                         "success": False,
-                        "message": f"❌ Error: {response.get('error', 'Unknown error')}",
+                        "message": f"[ERROR] Error: {response.get('error', 'Unknown error')}",
                         "conversation_id": conversation_id,
                         "timestamp": datetime.now().isoformat()
                     }
@@ -137,7 +137,7 @@ class CanvasChatbot:
                         except json.JSONDecodeError as e:
                             return {
                                 "success": False,
-                                "message": f"❌ Error: Invalid function arguments: {str(e)}",
+                                "message": f"[ERROR] Error: Invalid function arguments: {str(e)}",
                                 "conversation_id": conversation_id,
                                 "timestamp": datetime.now().isoformat()
                             }
@@ -193,7 +193,7 @@ class CanvasChatbot:
                         error_context = f"Function {function_name} failed: {function_result.get('error', 'Unknown error')}"
                         if 'available_functions' in function_result:
                             error_context += f" Available functions: {', '.join(function_result['available_functions'])}"
-                        print(f"❌ {error_context}")
+                        print(f"[ERROR] {error_context}")
                         
                         # Continue to let LLM respond to the error rather than breaking
                 
@@ -226,12 +226,12 @@ class CanvasChatbot:
             
             # If we exit the loop without a proper response, determine why
             if iteration_count >= max_iterations:
-                print(f"⚠️ Reached maximum iterations ({max_iterations}). Requesting final response...")
+                print(f"[WARNING] Reached maximum iterations ({max_iterations}). Requesting final response...")
                 
                 # Return a response that prompts the user to continue or stop
                 return {
                     "success": True,
-                    "message": f"⚠️ **Maximum iterations reached ({max_iterations})**\n\n" +
+                    "message": f"[WARNING] **Maximum iterations reached ({max_iterations})**\n\n" +
                               f"I've made {function_calls_made} function calls while processing your request. " +
                               f"Some operations may still be in progress.\n\n" +
                               f"**Would you like me to:**\n" +
@@ -247,7 +247,7 @@ class CanvasChatbot:
                     "requires_user_input": True
                 }
             else:
-                print("⚠️ Function calling loop ended unexpectedly. Requesting final response...")
+                print("[WARNING] Function calling loop ended unexpectedly. Requesting final response...")
                 summary_prompt = "Please provide a summary of the operations performed and their results. Do not make any more function calls."
                 
                 # Add a message asking for summary
@@ -272,16 +272,16 @@ class CanvasChatbot:
                 else:
                     return {
                         "success": False,
-                        "message": f"⚠️ Operations completed but encountered issues. Made {function_calls_made} function calls in {iteration_count} iterations.",
+                        "message": f"[WARNING] Operations completed but encountered issues. Made {function_calls_made} function calls in {iteration_count} iterations.",
                         "conversation_id": conversation_id,
                         "timestamp": datetime.now().isoformat()
                     }
                 
         except Exception as e:
-            print(f"❌ Error processing user message: {e}")
+            print(f"[ERROR] Error processing user message: {e}")
             return {
                 "success": False,
-                "message": f"❌ Error processing message: {str(e)}",
+                "message": f"[ERROR] Error processing message: {str(e)}",
                 "conversation_id": conversation_id,
                 "timestamp": datetime.now().isoformat()
             }
@@ -289,7 +289,7 @@ class CanvasChatbot:
     def get_help_text(self) -> str:
         """Get help information"""
         return """
-🎯 CANVAS CHATBOT HELP
+[TARGET] CANVAS CHATBOT HELP
 
 Available Commands:
 • Create containers: "Create a container called 'chart1' at 100,100 with size 300x200"

@@ -25,7 +25,7 @@ class WebSocketManager:
         await websocket.accept()
         self.active_connections.add(websocket)
         canvas_bridge.add_websocket_connection(websocket)
-        print(f"✅ WebSocket client connected. Total connections: {len(self.active_connections)}")
+        print(f"[SUCCESS] WebSocket client connected. Total connections: {len(self.active_connections)}")
         
         # Send initial canvas state
         try:
@@ -36,7 +36,7 @@ class WebSocketManager:
                 "timestamp": datetime.now().isoformat()
             }))
         except Exception as e:
-            print(f"❌ Error sending initial state: {e}")
+            print(f"[ERROR] Error sending initial state: {e}")
     
     def disconnect(self, websocket: WebSocket):
         """Remove a WebSocket connection"""
@@ -49,7 +49,7 @@ class WebSocketManager:
         try:
             await websocket.send_text(json.dumps(message))
         except Exception as e:
-            print(f"❌ Error sending personal message: {e}")
+            print(f"[ERROR] Error sending personal message: {e}")
             self.disconnect(websocket)
     
     async def broadcast(self, message: Dict[str, Any], exclude: WebSocket = None):
@@ -147,7 +147,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         }, exclude=websocket)
                         
                 except Exception as e:
-                    print(f"❌ Error processing chat message: {e}")
+                    print(f"[ERROR] Error processing chat message: {e}")
                     await websocket_manager.send_personal_message({
                         "type": "error",
                         "data": {"message": f"Error processing message: {str(e)}"},
@@ -164,7 +164,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "timestamp": datetime.now().isoformat()
                     }, websocket)
                 except Exception as e:
-                    print(f"❌ Error getting canvas state: {e}")
+                    print(f"[ERROR] Error getting canvas state: {e}")
                     await websocket_manager.send_personal_message({
                         "type": "error",
                         "data": {"message": f"Error getting canvas state: {str(e)}"},
@@ -203,7 +203,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 
             else:
                 # Unknown message type
-                print(f"⚠️ Unknown message type: {message_type}")
+                print(f"[WARNING] Unknown message type: {message_type}")
                 await websocket_manager.send_personal_message({
                     "type": "error",
                     "data": {"message": f"Unknown message type: {message_type}"},
@@ -213,5 +213,5 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         websocket_manager.disconnect(websocket)
     except Exception as e:
-        print(f"❌ WebSocket error: {e}")
+        print(f"[ERROR] WebSocket error: {e}")
         websocket_manager.disconnect(websocket) 
