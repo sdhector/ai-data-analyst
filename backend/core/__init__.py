@@ -18,11 +18,13 @@ from . import utilities
 from . import guardrails
 from . import tools
 from . import registry
+from .chatbot import core_chatbot
 
 __all__ = [
     "primitives",
     "utilities", 
     "guardrails",
     "tools",
-    "registry"
+    "registry",
+    "core_chatbot"
 ] 

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend Debug Test</title>
+</head>
+<body>
+    <h1>Frontend Acknowledgment Debug Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="log"></div>
+    
+    <script>
+        let websocket = null;
+        let isConnected = false;
+        
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            logDiv.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+            console.log(message);
+        }
+        
+        function updateStatus(status) {
+            document.getElementById('status').textContent = status;
+        }
+        
+        function sendWebSocketMessage(message) {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify(message));
+                log('📤 Sent: ' + JSON.stringify(message));
+            } else {
+                log('⚠️ WebSocket not connected, message not sent');
+            }
+        }
+        
+        function resizeCanvas(width, height, commandId = null) {
+            log(`🎨 resizeCanvas called: ${width}x${height}, commandId: ${commandId}`);
+            log(`🔗 isConnected: ${isConnected}`);
+            
+            try {
+                // Simulate canvas resize
+                log('✅ Canvas resize simulated successfully');
+                
+                // Send acknowledgment back to backend
+                if (isConnected) {
+                    const ackMessage = {
+                        type: 'canvas_command_ack',
+                        command: 'edit_canvas_size',
+                        status: 'success',
+                        data: {
+                            requested_width: width,
+                            requested_height: height,
+                            actual_width: width,
+                            actual_height: height,
+                            command_id: commandId,
+                            timestamp: new Date().toISOString()
+                        },
+                        message: `Canvas successfully resized to ${width}x${height}`
+                    };
+                    
+                    sendWebSocketMessage(ackMessage);
+                    log('📤 Acknowledgment sent');
+                } else {
+                    log('❌ Not connected - acknowledgment not sent');
+                }
+                
+                return true;
+            } catch (error) {
+                log('❌ Error in resizeCanvas: ' + error.message);
+                return false;
+            }
+        }
+        
+        function executeCanvasCommand(command, data, commandId = null) {
+            log(`🎨 executeCanvasCommand: ${command}, commandId: ${commandId}`);
+            
+            switch (command) {
+                case 'edit_canvas_size':
+                    resizeCanvas(data.width, data.height, commandId);
+                    break;
+                default:
+                    log('⚠️ Unknown canvas command: ' + command);
+            }
+        }
+        
+        function handleWebSocketMessage(message) {
+            log('📥 Received: ' + JSON.stringify(message));
+            
+            switch (message.type) {
+                case 'handshake_response':
+                    log('🤝 Handshake successful');
+                    updateStatus('Connected');
+                    break;
+                    
+                case 'initial_state':
+                    log('📋 Initial state received');
+                    break;
+                    
+                case 'canvas_command':
+                    executeCanvasCommand(message.command, message.data, message.command_id);
+                    break;
+                    
+                default:
+                    log('⚠️ Unknown message type: ' + message.type);
+            }
+        }
+        
+        function initializeWebSocket() {
+            const wsUrl = `ws://${window.location.host}/ws`;
+            log('📡 Connecting to: ' + wsUrl);
+            
+            try {
+                websocket = new WebSocket(wsUrl);
+                
+                websocket.onopen = function(event) {
+                    log('✅ WebSocket connected');
+                    isConnected = true;
+                    updateStatus('Connected');
+                    
+                    // Send handshake
+                    sendWebSocketMessage({
+                        type: 'handshake',
+                        data: {
+                            clientType: 'debug_test_frontend',
+                            version: '0.1.0'
+                        }
+                    });
+                };
+                
+                websocket.onmessage = function(event) {
+                    try {
+                        const message = JSON.parse(event.data);
+                        handleWebSocketMessage(message);
+                    } catch (error) {
+                        log('❌ Error parsing message: ' + error.message);
+                    }
+                };
+                
+                websocket.onclose = function(event) {
+                    log('🔌 WebSocket disconnected');
+                    isConnected = false;
+                    updateStatus('Disconnected');
+                };
+                
+                websocket.onerror = function(error) {
+                    log('❌ WebSocket error: ' + error);
+                };
+                
+            } catch (error) {
+                log('❌ Failed to initialize WebSocket: ' + error.message);
+                updateStatus('Error');
+            }
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', function() {
+            initializeWebSocket();
+        });
+    </script>
+</body>
+</html> 

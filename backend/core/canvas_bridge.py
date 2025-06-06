@@ -9,7 +9,7 @@ import json
 import math
 import asyncio
 from typing import Dict, Any, List, Optional, Set
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class CanvasBridge:
@@ -20,6 +20,7 @@ class CanvasBridge:
     def __init__(self):
         """Initialize the canvas bridge"""
         self.websocket_connections: Set = set()
+        self.pending_commands: Dict[str, Dict] = {}  # Track pending commands awaiting acknowledgment
         self.canvas_state = {
             "containers": {},
             "canvas_size": {"width": 800, "height": 600},
@@ -40,21 +41,99 @@ class CanvasBridge:
         
     async def broadcast_to_frontend(self, message: Dict[str, Any]):
         """Broadcast a message to all connected frontends"""
+        print(f"[CANVAS_BRIDGE] Broadcasting message: {message.get('type', 'unknown')} to {len(self.websocket_connections)} connection(s)")
+        
         if not self.websocket_connections:
+            print("[CANVAS_BRIDGE] No WebSocket connections available for broadcast")
             return
             
         message_json = json.dumps(message)
         disconnected = set()
+        sent_count = 0
         
         for websocket in self.websocket_connections:
             try:
                 await websocket.send_text(message_json)
-            except Exception:
+                sent_count += 1
+                print(f"[CANVAS_BRIDGE] Message sent successfully to WebSocket connection")
+            except Exception as e:
+                print(f"[CANVAS_BRIDGE] Failed to send message to WebSocket: {e}")
                 disconnected.add(websocket)
         
         # Remove disconnected websockets
         for ws in disconnected:
             self.websocket_connections.discard(ws)
+            
+        print(f"[CANVAS_BRIDGE] Broadcast complete: {sent_count} successful, {len(disconnected)} failed")
+    
+    def track_pending_command(self, command_id: str, command_type: str, data: Dict[str, Any]):
+        """Track a command that's waiting for acknowledgment"""
+        self.pending_commands[command_id] = {
+            "command_type": command_type,
+            "data": data,
+            "timestamp": datetime.now().isoformat(),
+            "status": "pending"
+        }
+        print(f"[CANVAS_BRIDGE] Tracking pending command: {command_id} ({command_type})")
+    
+    def handle_command_acknowledgment(self, ack_data: Dict[str, Any]) -> bool:
+        """Handle acknowledgment from frontend"""
+        command_id = ack_data.get("data", {}).get("command_id")
+        if not command_id:
+            print("[CANVAS_BRIDGE] Acknowledgment received without command_id")
+            return False
+        
+        if command_id not in self.pending_commands:
+            print(f"[CANVAS_BRIDGE] Acknowledgment for unknown command: {command_id}")
+            return False
+        
+        pending_cmd = self.pending_commands[command_id]
+        ack_status = ack_data.get("status", "unknown")
+        
+        print(f"[CANVAS_BRIDGE] ✅ Command acknowledgment received: {command_id} - {ack_status}")
+        print(f"[CANVAS_BRIDGE] 📋 Ack data: {ack_data.get('message', 'No message')}")
+        
+        # Update command status
+        pending_cmd["status"] = ack_status
+        pending_cmd["ack_timestamp"] = datetime.now().isoformat()
+        pending_cmd["ack_data"] = ack_data
+        
+        # For successful canvas resize, verify the dimensions match
+        if (ack_status == "success" and 
+            pending_cmd["command_type"] == "edit_canvas_size" and 
+            "data" in ack_data):
+            
+            ack_width = ack_data["data"].get("actual_width")
+            ack_height = ack_data["data"].get("actual_height")
+            expected_width = pending_cmd["data"].get("width")
+            expected_height = pending_cmd["data"].get("height")
+            
+            if ack_width == expected_width and ack_height == expected_height:
+                print(f"[CANVAS_BRIDGE] ✅ Canvas resize verified: {ack_width}x{ack_height}")
+            else:
+                print(f"[CANVAS_BRIDGE] ⚠️ Canvas resize mismatch: expected {expected_width}x{expected_height}, got {ack_width}x{ack_height}")
+        
+        # Remove from pending (or keep for audit trail - your choice)
+        # For now, let's keep them for debugging but mark as completed
+        return True
+    
+    def get_pending_commands(self) -> Dict[str, Dict]:
+        """Get all pending commands"""
+        return self.pending_commands.copy()
+    
+    def cleanup_old_commands(self, max_age_minutes: int = 5):
+        """Clean up old pending commands"""
+        cutoff_time = datetime.now() - timedelta(minutes=max_age_minutes)
+        to_remove = []
+        
+        for cmd_id, cmd_data in self.pending_commands.items():
+            cmd_time = datetime.fromisoformat(cmd_data["timestamp"])
+            if cmd_time < cutoff_time:
+                to_remove.append(cmd_id)
+        
+        for cmd_id in to_remove:
+            print(f"[CANVAS_BRIDGE] 🧹 Cleaning up old command: {cmd_id}")
+            del self.pending_commands[cmd_id]
     
     def get_canvas_size(self) -> Dict[str, int]:
         """Get current canvas size"""

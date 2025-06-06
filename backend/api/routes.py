@@ -9,8 +9,8 @@ from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-from core.chatbot import chatbot
-from core.canvas_bridge import canvas_bridge
+from core.chatbot import core_chatbot as chatbot
+from core.canvas_bridge import canvas_bridge  # Still using old canvas_bridge for now
 
 
 # Request/Response Models

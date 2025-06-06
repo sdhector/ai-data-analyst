@@ -118,7 +118,7 @@ function handleWebSocketMessage(message) {
             break;
             
         case 'canvas_command':
-            executeCanvasCommand(message.command, message.data);
+            executeCanvasCommand(message.command, message.data, message.command_id);
             break;
             
         case 'canvas_update':
@@ -158,36 +158,55 @@ function handleChatResponse(response) {
 /**
  * Execute canvas command from backend
  */
-function executeCanvasCommand(command, data) {
+function executeCanvasCommand(command, data, commandId = null) {
     console.log(`🎨 Executing canvas command: ${command}`, data);
     
     switch (command) {
         case 'create_container':
             createContainer(data.container_id, data.x, data.y, data.width, data.height);
+            // TODO: Add acknowledgment for container creation
             break;
             
         case 'delete_container':
             deleteContainer(data.container_id);
+            // TODO: Add acknowledgment for container deletion
             break;
             
         case 'modify_container':
             modifyContainer(data.container_id, data.x, data.y, data.width, data.height);
+            // TODO: Add acknowledgment for container modification
             break;
             
         case 'clear_canvas':
             clearCanvas();
+            // TODO: Add acknowledgment for canvas clearing
             break;
             
         case 'edit_canvas_size':
-            resizeCanvas(data.width, data.height);
+            resizeCanvas(data.width, data.height, commandId);
             break;
             
         case 'take_screenshot':
             takeScreenshot(data.filename);
+            // TODO: Add acknowledgment for screenshot
             break;
             
         default:
             console.warn('⚠️ Unknown canvas command:', command);
+            // Send error acknowledgment for unknown commands
+            if (isConnected) {
+                sendWebSocketMessage({
+                    type: 'canvas_command_ack',
+                    command: command,
+                    status: 'error',
+                    data: {
+                        command_id: commandId,
+                        error: `Unknown canvas command: ${command}`,
+                        timestamp: new Date().toISOString()
+                    },
+                    message: `Unknown canvas command: ${command}`
+                });
+            }
     }
 }
 
@@ -515,22 +534,93 @@ function clearCanvas() {
 /**
  * Resize the canvas
  */
-function resizeCanvas(width, height) {
+function resizeCanvas(width, height, commandId = null) {
     if (window.canvasState.canvas) {
-        // Update canvas element dimensions
-        window.canvasState.canvas.style.width = width + 'px';
-        window.canvasState.canvas.style.height = height + 'px';
-        
-        // Update internal state
-        window.canvasState.canvasSize = { width, height };
-        
-        // Update state display to show new canvas size
-        updateStateDisplay();
-        
-        console.log(`Canvas resized to ${width}x${height}`);
-        addMessage(`Canvas resized to ${width}x${height} pixels`, 'success');
-        return true;
+        try {
+            // Store old dimensions for verification
+            const oldWidth = window.canvasState.canvasSize.width;
+            const oldHeight = window.canvasState.canvasSize.height;
+            
+            // Update canvas element dimensions
+            window.canvasState.canvas.style.width = width + 'px';
+            window.canvasState.canvas.style.height = height + 'px';
+            
+            // Update internal state
+            window.canvasState.canvasSize = { width, height };
+            
+            // Update state display to show new canvas size
+            updateStateDisplay();
+            
+            console.log(`✅ Canvas resized successfully from ${oldWidth}x${oldHeight} to ${width}x${height}`);
+            addMessage(`Canvas resized to ${width}x${height} pixels`, 'success');
+            
+            // Send acknowledgment back to backend
+            if (isConnected) {
+                sendWebSocketMessage({
+                    type: 'canvas_command_ack',
+                    command: 'edit_canvas_size',
+                    status: 'success',
+                    data: {
+                        requested_width: width,
+                        requested_height: height,
+                        actual_width: window.canvasState.canvasSize.width,
+                        actual_height: window.canvasState.canvasSize.height,
+                        old_width: oldWidth,
+                        old_height: oldHeight,
+                        command_id: commandId,
+                        timestamp: new Date().toISOString()
+                    },
+                    message: `Canvas successfully resized to ${width}x${height}`
+                });
+                console.log('📤 Canvas resize acknowledgment sent to backend');
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('❌ Failed to resize canvas:', error);
+            addMessage(`Failed to resize canvas: ${error.message}`, 'error');
+            
+            // Send failure acknowledgment
+            if (isConnected) {
+                sendWebSocketMessage({
+                    type: 'canvas_command_ack',
+                    command: 'edit_canvas_size',
+                    status: 'error',
+                    data: {
+                        requested_width: width,
+                        requested_height: height,
+                        command_id: commandId,
+                        error: error.message,
+                        timestamp: new Date().toISOString()
+                    },
+                    message: `Failed to resize canvas: ${error.message}`
+                });
+            }
+            
+            return false;
+        }
     }
+    
+    console.error('❌ Canvas element not found');
+    addMessage('Canvas element not found', 'error');
+    
+    // Send failure acknowledgment
+    if (isConnected) {
+        sendWebSocketMessage({
+            type: 'canvas_command_ack',
+            command: 'edit_canvas_size',
+            status: 'error',
+            data: {
+                requested_width: width,
+                requested_height: height,
+                command_id: commandId,
+                error: 'Canvas element not found',
+                timestamp: new Date().toISOString()
+            },
+            message: 'Canvas element not found'
+        });
+    }
+    
     return false;
 }
 

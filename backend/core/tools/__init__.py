@@ -5,5 +5,12 @@ Contains high-level operations exposed to the AI, orchestrating primitives, util
 These provide AI-friendly interfaces with comprehensive error handling and rich response formatting.
 """
 
-# Will be implemented in later phases
-__all__ = [] 
+from .canvas_management_tools import (
+    set_canvas_dimensions_tool,
+    get_canvas_dimensions_tool
+)
+
+__all__ = [
+    "set_canvas_dimensions_tool",
+    "get_canvas_dimensions_tool"
+] 

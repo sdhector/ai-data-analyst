@@ -10,8 +10,8 @@ from typing import Dict, Any, Set
 from fastapi import WebSocket, WebSocketDisconnect
 from datetime import datetime
 
-from core.chatbot import chatbot
-from core.canvas_bridge import canvas_bridge
+from core.chatbot import core_chatbot as chatbot
+from core.canvas_bridge import canvas_bridge  # Still using old canvas_bridge for now
 
 
 class WebSocketManager:
@@ -189,6 +189,29 @@ async def websocket_endpoint(websocket: WebSocket):
                     "timestamp": datetime.now().isoformat()
                 }, websocket)
                 
+            elif message_type == "canvas_command_ack":
+                # Handle canvas command acknowledgment from frontend
+                print(f"[WEBSOCKET] 📥 Canvas command acknowledgment received: {message.get('command', 'unknown')}")
+                
+                try:
+                    # Pass acknowledgment to canvas bridge for tracking
+                    canvas_bridge.handle_command_acknowledgment(message)
+                    
+                    # Optionally broadcast acknowledgment to other clients
+                    await websocket_manager.broadcast({
+                        "type": "canvas_command_ack",
+                        "data": message,
+                        "timestamp": datetime.now().isoformat()
+                    }, exclude=websocket)
+                    
+                except Exception as e:
+                    print(f"[ERROR] Error handling canvas command acknowledgment: {e}")
+                    await websocket_manager.send_personal_message({
+                        "type": "error",
+                        "data": {"message": f"Error processing acknowledgment: {str(e)}"},
+                        "timestamp": datetime.now().isoformat()
+                    }, websocket)
+            
             elif message_type == "canvas_update_notification":
                 # Handle canvas update notifications from frontend
                 # This could be used for manual canvas changes made directly in the frontend
