@@ -8,7 +8,8 @@
 window.canvasState = {
     containers: new Map(),
     canvas: null,
-    containerCounter: 0
+    containerCounter: 0,
+    canvasSize: { width: 800, height: 600 } // Track current canvas size
 };
 
 // WebSocket connection
@@ -196,6 +197,23 @@ function executeCanvasCommand(command, data) {
 function updateCanvasFromState(state) {
     console.log('🔄 Updating canvas from backend state:', state);
     
+    // Update canvas size if provided
+    if (state.canvas_size) {
+        const newWidth = state.canvas_size.width;
+        const newHeight = state.canvas_size.height;
+        
+        // Update canvas dimensions
+        if (window.canvasState.canvas) {
+            window.canvasState.canvas.style.width = newWidth + 'px';
+            window.canvasState.canvas.style.height = newHeight + 'px';
+        }
+        
+        // Update internal state
+        window.canvasState.canvasSize = { width: newWidth, height: newHeight };
+        
+        console.log(`Canvas size updated to ${newWidth}x${newHeight}`);
+    }
+    
     // Clear current containers
     window.canvasState.containers.clear();
     if (window.canvasState.canvas) {
@@ -306,15 +324,19 @@ function setupEventListeners() {
 }
 
 /**
- * Update the state display (container count only)
+ * Update the state display (container count and canvas size)
  */
 function updateStateDisplay() {
-    const containerCountElement = document.getElementById('containerCount');
+    const canvasInfoElement = document.getElementById('canvasInfo');
     const containers = window.canvasState.containers;
+    const canvasSize = window.canvasState.canvasSize;
     
-    // Update container count in header
-    if (containerCountElement) {
-        containerCountElement.textContent = containers.size;
+    // Update canvas info in header
+    if (canvasInfoElement) {
+        canvasInfoElement.innerHTML = `
+            <span id="containerCount">${containers.size}</span> containers • 
+            <span id="canvasSize">${canvasSize.width}×${canvasSize.height}</span>
+        `;
     }
 }
 
@@ -392,9 +414,12 @@ function createContainer(id, x, y, width, height) {
         return false;
     }
 
-    // Validate bounds
-    if (x < 0 || y < 0 || x + width > 800 || y + height > 600) {
-        console.warn('Container bounds exceed canvas size');
+    // Validate bounds using current canvas size
+    const canvasWidth = window.canvasState.canvasSize.width;
+    const canvasHeight = window.canvasState.canvasSize.height;
+    
+    if (x < 0 || y < 0 || x + width > canvasWidth || y + height > canvasHeight) {
+        console.warn(`Container bounds exceed canvas size (${canvasWidth}x${canvasHeight})`);
         return false;
     }
 
@@ -449,9 +474,12 @@ function modifyContainer(id, x, y, width, height) {
         return false;
     }
     
-    // Validate bounds
-    if (x < 0 || y < 0 || x + width > 800 || y + height > 600) {
-        console.warn('Container bounds exceed canvas size');
+    // Validate bounds using current canvas size
+    const canvasWidth = window.canvasState.canvasSize.width;
+    const canvasHeight = window.canvasState.canvasSize.height;
+    
+    if (x < 0 || y < 0 || x + width > canvasWidth || y + height > canvasHeight) {
+        console.warn(`Container bounds exceed canvas size (${canvasWidth}x${canvasHeight})`);
         return false;
     }
     
@@ -489,9 +517,18 @@ function clearCanvas() {
  */
 function resizeCanvas(width, height) {
     if (window.canvasState.canvas) {
+        // Update canvas element dimensions
         window.canvasState.canvas.style.width = width + 'px';
         window.canvasState.canvas.style.height = height + 'px';
+        
+        // Update internal state
+        window.canvasState.canvasSize = { width, height };
+        
+        // Update state display to show new canvas size
+        updateStateDisplay();
+        
         console.log(`Canvas resized to ${width}x${height}`);
+        addMessage(`Canvas resized to ${width}x${height} pixels`, 'success');
         return true;
     }
     return false;
@@ -510,10 +547,16 @@ function takeScreenshot(filename) {
 
 function testCreateContainer() {
     const id = `test_${Date.now()}`;
-    const x = Math.floor(Math.random() * 600);
-    const y = Math.floor(Math.random() * 400);
+    const canvasWidth = window.canvasState.canvasSize.width;
+    const canvasHeight = window.canvasState.canvasSize.height;
+    
+    const maxWidth = 200;
+    const maxHeight = 150;
     const width = 100 + Math.floor(Math.random() * 100);
     const height = 80 + Math.floor(Math.random() * 80);
+    
+    const x = Math.floor(Math.random() * Math.max(50, canvasWidth - width));
+    const y = Math.floor(Math.random() * Math.max(50, canvasHeight - height));
     
     createContainer(id, x, y, width, height);
     addMessage(`Test container ${id} created`, 'success');
@@ -534,10 +577,14 @@ function testModifyContainer() {
     const containers = Array.from(window.canvasState.containers.keys());
     if (containers.length > 0) {
         const id = containers[Math.floor(Math.random() * containers.length)];
-        const x = Math.floor(Math.random() * 600);
-        const y = Math.floor(Math.random() * 400);
+        const canvasWidth = window.canvasState.canvasSize.width;
+        const canvasHeight = window.canvasState.canvasSize.height;
+        
         const width = 100 + Math.floor(Math.random() * 100);
         const height = 80 + Math.floor(Math.random() * 80);
+        
+        const x = Math.floor(Math.random() * Math.max(50, canvasWidth - width));
+        const y = Math.floor(Math.random() * Math.max(50, canvasHeight - height));
         
         modifyContainer(id, x, y, width, height);
         addMessage(`Container ${id} modified`, 'success');
@@ -558,14 +605,17 @@ function testGetState() {
 function createTestDashboard() {
     clearCanvas();
     
-    // Create header
-    createContainer('header', 0, 0, 800, 80);
+    const canvasWidth = window.canvasState.canvasSize.width;
+    const canvasHeight = window.canvasState.canvasSize.height;
     
-    // Create sidebar
-    createContainer('sidebar', 0, 80, 200, 520);
+    // Create header (full width, 80px height)
+    createContainer('header', 0, 0, canvasWidth, 80);
     
-    // Create main content
-    createContainer('main_content', 200, 80, 600, 520);
+    // Create sidebar (200px wide, remaining height)
+    createContainer('sidebar', 0, 80, 200, canvasHeight - 80);
+    
+    // Create main content (remaining width, remaining height)
+    createContainer('main_content', 200, 80, canvasWidth - 200, canvasHeight - 80);
     
     addMessage('Test dashboard created', 'success');
 }
