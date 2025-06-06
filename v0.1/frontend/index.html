@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Data Analyst v0.1 - Compact</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Compact Header -->
+        <header class="app-header">
+            <h1>🎨 AI Data Analyst v0.1</h1>
+            <div class="header-info">
+                <span class="status-indicator connected" id="connectionStatus"></span>
+                <span id="statusText">Ready</span>
+                <span class="divider">•</span>
+                <span id="canvasInfo"><span id="containerCount">0</span> containers</span>
+            </div>
+        </header>
+
+        <!-- Compact Main Content -->
+        <main class="main-content">
+            <!-- Left Panel: Chat Interface -->
+            <aside class="chat-panel">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="welcome-message">
+                        <p><strong>AI Data Analyst v0.1 - Compact</strong></p>
+                        <p>Minimal interface for canvas operations. All functions available via console:</p>
+                        <code>window.canvasAPI</code> • <code>createTestDashboard()</code> • <code>runDemo()</code>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Right Panel: Canvas -->
+            <section class="canvas-panel">
+                <!-- Canvas Container -->
+                <div class="canvas-container">
+                    <div id="canvas" class="canvas">
+                        <!-- Containers will be dynamically created here -->
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 
