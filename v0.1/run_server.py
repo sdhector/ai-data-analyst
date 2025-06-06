@@ -27,12 +27,14 @@ def main():
     
     # Import and run the server
     try:
-        from backend.main import main as server_main
+        # Change to backend directory for proper imports
+        os.chdir(backend_dir)
+        from main import main as server_main
         server_main()
     except ImportError as e:
         print(f"❌ Import error: {e}")
         print("   Make sure you've installed the requirements:")
-        print("   pip install -r backend/requirements.txt")
+        print("   pip install -r requirements.txt")
         sys.exit(1)
     except Exception as e:
         print(f"❌ Error starting server: {e}")

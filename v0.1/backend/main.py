@@ -27,10 +27,22 @@ except ImportError:
     sys.exit(1)
 
 # Core imports
-from core.chatbot import chatbot
-from core.canvas_bridge import canvas_bridge
-from api.routes import router
-from api.websocket import websocket_endpoint
+try:
+    from core.chatbot import chatbot
+    from core.canvas_bridge import canvas_bridge
+    from api.routes import router
+    from api.websocket import websocket_endpoint
+except ImportError:
+    # Try absolute imports if relative imports fail
+    import sys
+    from pathlib import Path
+    backend_path = Path(__file__).parent
+    sys.path.insert(0, str(backend_path))
+    
+    from core.chatbot import chatbot
+    from core.canvas_bridge import canvas_bridge
+    from api.routes import router
+    from api.websocket import websocket_endpoint
 
 
 class AIDataAnalystServer:
@@ -97,14 +109,21 @@ class AIDataAnalystServer:
             """Serve the main frontend page"""
             frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
             
+            print(f"🔍 Looking for frontend at: {frontend_path}")
+            print(f"🔍 Frontend exists: {frontend_path.exists()}")
+            print(f"🔍 Current working directory: {Path.cwd()}")
+            
             if not frontend_path.exists():
-                raise HTTPException(status_code=404, detail="Frontend not found")
+                raise HTTPException(status_code=404, detail=f"Frontend not found at {frontend_path}")
             
             return FileResponse(frontend_path)
     
     def setup_static_files(self):
         """Setup static file serving for the frontend"""
         frontend_dir = Path(__file__).parent.parent / "frontend"
+        
+        print(f"🔍 Setting up static files from: {frontend_dir}")
+        print(f"🔍 Frontend directory exists: {frontend_dir.exists()}")
         
         if frontend_dir.exists():
             # Mount the frontend directory as static files
@@ -114,16 +133,18 @@ class AIDataAnalystServer:
             @self.app.get("/styles.css")
             async def serve_css():
                 css_path = frontend_dir / "styles.css"
+                print(f"🔍 Serving CSS from: {css_path}")
                 if css_path.exists():
                     return FileResponse(css_path, media_type="text/css")
-                raise HTTPException(status_code=404, detail="CSS file not found")
+                raise HTTPException(status_code=404, detail=f"CSS file not found at {css_path}")
             
             @self.app.get("/script.js")
             async def serve_js():
                 js_path = frontend_dir / "script.js"
+                print(f"🔍 Serving JS from: {js_path}")
                 if js_path.exists():
                     return FileResponse(js_path, media_type="application/javascript")
-                raise HTTPException(status_code=404, detail="JavaScript file not found")
+                raise HTTPException(status_code=404, detail=f"JavaScript file not found at {js_path}")
             
             print(f"✅ Frontend static files mounted from: {frontend_dir}")
         else:

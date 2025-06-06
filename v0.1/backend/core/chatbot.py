@@ -10,9 +10,9 @@ import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from .llm_client import CanvasLLMClient
-from .function_executor import CanvasFunctionExecutor
-from .canvas_bridge import canvas_bridge
+from core.llm_client import CanvasLLMClient
+from core.function_executor import CanvasFunctionExecutor
+from core.canvas_bridge import canvas_bridge
 
 
 class CanvasChatbot:
@@ -48,7 +48,7 @@ class CanvasChatbot:
             print(f"❌ Failed to initialize chatbot components: {e}")
             raise
     
-    async def process_user_message(self, user_message: str, conversation_id: str = None) -> Dict[str, Any]:
+    async def process_user_message(self, user_message: str, conversation_id: str = None, allow_extended_iterations: bool = False) -> Dict[str, Any]:
         """
         Process a user message with LLM function calling
         
@@ -78,8 +78,14 @@ class CanvasChatbot:
             })
             
             function_calls_made = 0
-            max_iterations = 5  # Prevent infinite loops
+            max_iterations = 10 if allow_extended_iterations else 5  # Allow more iterations if requested
             iteration_count = 0
+            
+            # Check if user is requesting to continue from max iterations
+            continue_keywords = ['continue', 'yes', 'keep going', 'more iterations', 'proceed']
+            if any(keyword in user_message.lower() for keyword in continue_keywords):
+                allow_extended_iterations = True
+                max_iterations = 10
             
             while iteration_count < max_iterations:
                 iteration_count += 1
@@ -221,37 +227,55 @@ class CanvasChatbot:
             # If we exit the loop without a proper response, determine why
             if iteration_count >= max_iterations:
                 print(f"⚠️ Reached maximum iterations ({max_iterations}). Requesting final response...")
-                summary_prompt = "You have reached the maximum number of iterations. Please provide a summary of the operations performed and their results. Do not make any more function calls."
-            else:
-                print("⚠️ Function calling loop ended unexpectedly. Requesting final response...")
-                summary_prompt = "Please provide a summary of the operations performed and their results. Do not make any more function calls."
-            
-            # Add a message asking for summary
-            messages.append({
-                "role": "system",
-                "content": summary_prompt
-            })
-            
-            # Get final response without function calling
-            final_response = self.llm_client.chat_completion(messages=messages, functions=None)
-            
-            if final_response["status"] == "success" and final_response["content"]:
+                
+                # Return a response that prompts the user to continue or stop
                 return {
                     "success": True,
-                    "message": final_response["content"],
+                    "message": f"⚠️ **Maximum iterations reached ({max_iterations})**\n\n" +
+                              f"I've made {function_calls_made} function calls while processing your request. " +
+                              f"Some operations may still be in progress.\n\n" +
+                              f"**Would you like me to:**\n" +
+                              f"• Continue with more iterations? (say 'continue' or 'yes')\n" +
+                              f"• Stop here and provide a summary? (say 'stop' or 'summary')\n" +
+                              f"• Try a different approach? (describe what you'd like)\n\n" +
+                              f"*Note: You can also ask me to check the current canvas state to see what was accomplished.*",
                     "conversation_id": conversation_id,
                     "timestamp": datetime.now().isoformat(),
                     "function_calls_made": function_calls_made,
                     "iterations": iteration_count,
-                    "warning": "Reached maximum iterations"
+                    "status": "max_iterations_reached",
+                    "requires_user_input": True
                 }
             else:
-                return {
-                    "success": False,
-                    "message": f"⚠️ Operations completed but encountered issues. Made {function_calls_made} function calls in {iteration_count} iterations.",
-                    "conversation_id": conversation_id,
-                    "timestamp": datetime.now().isoformat()
-                }
+                print("⚠️ Function calling loop ended unexpectedly. Requesting final response...")
+                summary_prompt = "Please provide a summary of the operations performed and their results. Do not make any more function calls."
+                
+                # Add a message asking for summary
+                messages.append({
+                    "role": "system",
+                    "content": summary_prompt
+                })
+                
+                # Get final response without function calling
+                final_response = self.llm_client.chat_completion(messages=messages, functions=None)
+                
+                if final_response["status"] == "success" and final_response["content"]:
+                    return {
+                        "success": True,
+                        "message": final_response["content"],
+                        "conversation_id": conversation_id,
+                        "timestamp": datetime.now().isoformat(),
+                        "function_calls_made": function_calls_made,
+                        "iterations": iteration_count,
+                        "warning": "Function calling loop ended unexpectedly"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": f"⚠️ Operations completed but encountered issues. Made {function_calls_made} function calls in {iteration_count} iterations.",
+                        "conversation_id": conversation_id,
+                        "timestamp": datetime.now().isoformat()
+                    }
                 
         except Exception as e:
             print(f"❌ Error processing user message: {e}")

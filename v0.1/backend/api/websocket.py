@@ -10,8 +10,8 @@ from typing import Dict, Any, Set
 from fastapi import WebSocket, WebSocketDisconnect
 from datetime import datetime
 
-from ..core.chatbot import chatbot
-from ..core.canvas_bridge import canvas_bridge
+from core.chatbot import chatbot
+from core.canvas_bridge import canvas_bridge
 
 
 class WebSocketManager:
@@ -112,6 +112,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Handle chat message
                 user_message = message.get("message", "")
                 conversation_id = message.get("conversation_id")
+                allow_extended_iterations = message.get("allow_extended_iterations", False)
                 
                 if not user_message.strip():
                     await websocket_manager.send_personal_message({
@@ -123,7 +124,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 
                 # Process message with chatbot
                 try:
-                    response = await chatbot.process_user_message(user_message, conversation_id)
+                    response = await chatbot.process_user_message(
+                        user_message, 
+                        conversation_id, 
+                        allow_extended_iterations=allow_extended_iterations
+                    )
                     
                     # Send response back to client
                     await websocket_manager.send_personal_message({

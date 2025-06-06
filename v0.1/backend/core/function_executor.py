@@ -10,7 +10,7 @@ import math
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from .canvas_bridge import canvas_bridge
+from core.canvas_bridge import canvas_bridge
 
 
 class CanvasFunctionExecutor:
@@ -209,7 +209,7 @@ class CanvasFunctionExecutor:
         
         return containers_for_optimization
     
-    def _apply_optimized_layout(self, optimization_result, target_container_id=None):
+    async def _apply_optimized_layout(self, optimization_result, target_container_id=None):
         """
         Apply the optimized layout to all containers
         
@@ -237,7 +237,7 @@ class CanvasFunctionExecutor:
             # Apply the optimized dimensions
             if opt_container['status'] == 'existing':
                 # Modify existing container
-                success = asyncio.create_task(self.canvas_bridge.modify_container(
+                success = await self.canvas_bridge.modify_container(
                     container_id=container_id,
                     x=opt_container['recommended_x'],
                     y=opt_container['recommended_y'],
@@ -245,10 +245,10 @@ class CanvasFunctionExecutor:
                     height=opt_container['recommended_height'],
                     auto_adjust=self.auto_adjust_enabled,
                     avoid_overlap=self.overlap_prevention_enabled
-                ))
+                )
             else:
                 # Create new container
-                success = asyncio.create_task(self.canvas_bridge.create_container(
+                success = await self.canvas_bridge.create_container(
                     container_id=container_id,
                     x=opt_container['recommended_x'],
                     y=opt_container['recommended_y'],
@@ -256,11 +256,11 @@ class CanvasFunctionExecutor:
                     height=opt_container['recommended_height'],
                     auto_adjust=self.auto_adjust_enabled,
                     avoid_overlap=self.overlap_prevention_enabled
-                ))
+                )
             
             container_result = {
                 "container_id": container_id,
-                "success": True,  # Assume success for now
+                "success": success,  # Use actual result from canvas operation
                 "status": opt_container['status'],
                 "optimized_position": (opt_container['recommended_x'], opt_container['recommended_y']),
                 "optimized_size": (opt_container['recommended_width'], opt_container['recommended_height']),
@@ -278,15 +278,29 @@ class CanvasFunctionExecutor:
             if target_container_id and container_id == target_container_id:
                 target_result = container_result
         
+        # Check if all operations were successful
+        all_successful = all(result["success"] for result in results)
+        failed_operations = [result for result in results if not result["success"]]
+        
+        # Determine overall success
+        overall_success = all_successful
+        error_message = None
+        
+        if not all_successful:
+            failed_ids = [result["container_id"] for result in failed_operations]
+            error_message = f"Failed to apply layout to containers: {', '.join(failed_ids)}"
+        
         return {
-            "success": True,
+            "success": overall_success,
+            "error": error_message,
             "optimization_used": True,
             "optimization_result": optimization_result,
             "container_results": results,
             "target_container": target_result,
             "metrics": optimization_result.get('metrics', {}),
             "layout_summary": optimization_result.get('summary', ''),
-            "recommendations": optimization_result.get('recommendations', [])
+            "recommendations": optimization_result.get('recommendations', []),
+            "failed_operations": failed_operations if failed_operations else []
         }
     
     async def execute_function_call(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -344,7 +358,7 @@ class CanvasFunctionExecutor:
                     )
                     
                     # Apply optimized layout
-                    layout_application = self._apply_optimized_layout(
+                    layout_application = await self._apply_optimized_layout(
                         optimization_result, 
                         target_container_id=clean_container_id
                     )
@@ -454,7 +468,7 @@ class CanvasFunctionExecutor:
                     )
                     
                     # Apply optimized layout to remaining containers
-                    layout_application = self._apply_optimized_layout(optimization_result)
+                    layout_application = await self._apply_optimized_layout(optimization_result)
                     
                     if layout_application["success"]:
                         metrics = layout_application["metrics"]
@@ -529,45 +543,70 @@ class CanvasFunctionExecutor:
                     )
                     
                     # Apply optimized layout
-                    layout_application = self._apply_optimized_layout(
+                    layout_application = await self._apply_optimized_layout(
                         optimization_result, 
                         target_container_id=container_id
                     )
                     
-                    if layout_application["success"] and layout_application["target_container"]["success"]:
-                        target_info = layout_application["target_container"]
-                        metrics = layout_application["metrics"]
-                        
-                        result_msg = f"✅ Container '{container_id}' modified successfully using optimized layout:\n"
-                        result_msg += f"   📍 New position: {target_info['optimized_position']}\n"
-                        result_msg += f"   📏 New size: {target_info['optimized_size']}\n"
-                        result_msg += f"   🎯 Grid position: Row {target_info['grid_position']['row']}, Col {target_info['grid_position']['col']}\n"
-                        result_msg += f"   📊 Space utilization: {metrics['space_utilization_percent']}%\n"
-                        result_msg += f"   🔧 Layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
-                        result_msg += f"   💡 Optimization: {layout_application['layout_summary']}"
-                        
-                        # Show previous vs new dimensions
-                        if target_info.get("previous_position") and target_info.get("previous_size"):
-                            result_msg += f"\n   📋 Previous: {target_info['previous_position']} size {target_info['previous_size']}"
-                        
-                        # Add information about other containers that were repositioned
-                        repositioned_containers = [r for r in layout_application["container_results"] 
-                                                 if r["container_id"] != container_id and r["status"] == "existing"]
-                        if repositioned_containers:
-                            result_msg += f"\n   🔄 Repositioned {len(repositioned_containers)} other container(s) for optimal layout"
-                        
-                        return {
-                            "status": "success",
-                            "result": result_msg,
-                            "optimization_used": True,
-                            "optimization_details": layout_application,
-                            "function_name": function_name
-                        }
+                    if layout_application["success"]:
+                        # Check if target container operation was successful
+                        target_info = layout_application.get("target_container")
+                        if target_info and target_info.get("success"):
+                            metrics = layout_application["metrics"]
+                            
+                            result_msg = f"✅ Container '{container_id}' modified successfully using optimized layout:\n"
+                            result_msg += f"   📍 New position: {target_info['optimized_position']}\n"
+                            result_msg += f"   📏 New size: {target_info['optimized_size']}\n"
+                            result_msg += f"   🎯 Grid position: Row {target_info['grid_position']['row']}, Col {target_info['grid_position']['col']}\n"
+                            result_msg += f"   📊 Space utilization: {metrics['space_utilization_percent']}%\n"
+                            result_msg += f"   🔧 Layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
+                            result_msg += f"   💡 Optimization: {layout_application['layout_summary']}"
+                            
+                            # Show previous vs new dimensions
+                            if target_info.get("previous_position") and target_info.get("previous_size"):
+                                result_msg += f"\n   📋 Previous: {target_info['previous_position']} size {target_info['previous_size']}"
+                            
+                            # Add information about other containers that were repositioned
+                            repositioned_containers = [r for r in layout_application["container_results"] 
+                                                     if r["container_id"] != container_id and r["status"] == "existing"]
+                            if repositioned_containers:
+                                result_msg += f"\n   🔄 Repositioned {len(repositioned_containers)} other container(s) for optimal layout"
+                            
+                            return {
+                                "status": "success",
+                                "result": result_msg,
+                                "optimization_used": True,
+                                "optimization_details": layout_application,
+                                "function_name": function_name
+                            }
+                        else:
+                            # Target container operation failed
+                            error_msg = f"Failed to modify target container '{container_id}'"
+                            if target_info:
+                                error_msg += f" - container operation returned success: {target_info.get('success', 'unknown')}"
+                            else:
+                                error_msg += " - no target container result found"
+                            
+                            return {
+                                "status": "error",
+                                "result": error_msg,
+                                "optimization_details": layout_application,
+                                "function_name": function_name
+                            }
                     else:
-                        error_msg = layout_application.get("error", "Unknown optimization error")
+                        # Overall layout application failed
+                        error_msg = layout_application.get("error", "Layout optimization failed")
+                        failed_ops = layout_application.get("failed_operations", [])
+                        
+                        detailed_error = f"Failed to modify container '{container_id}' with optimization: {error_msg}"
+                        if failed_ops:
+                            failed_ids = [op["container_id"] for op in failed_ops]
+                            detailed_error += f"\nFailed operations on containers: {', '.join(failed_ids)}"
+                        
                         return {
                             "status": "error",
-                            "result": f"Failed to modify container '{container_id}' with optimization: {error_msg}",
+                            "result": detailed_error,
+                            "optimization_details": layout_application,
                             "function_name": function_name
                         }
                         
@@ -640,6 +679,47 @@ class CanvasFunctionExecutor:
                     new_width = arguments['width']
                     new_height = arguments['height']
                     
+                    # Input validation
+                    if not isinstance(new_width, int) or not isinstance(new_height, int):
+                        return {
+                            "status": "error",
+                            "result": "Canvas width and height must be integers",
+                            "function_name": function_name
+                        }
+                    
+                    if new_width < 200 or new_height < 200:
+                        return {
+                            "status": "error",
+                            "result": "Canvas size must be at least 200x200 pixels for usability",
+                            "function_name": function_name
+                        }
+                    
+                    if new_width > 5000 or new_height > 5000:
+                        return {
+                            "status": "error",
+                            "result": "Canvas size cannot exceed 5000x5000 pixels for performance reasons",
+                            "function_name": function_name
+                        }
+                    
+                    # Get current state to check container impacts
+                    current_state = self.canvas_bridge.get_canvas_state()
+                    current_size = current_state.get('canvas_size', {'width': 800, 'height': 600})
+                    containers = current_state.get('containers', [])
+                    
+                    # Check if any containers will be outside new bounds
+                    affected_containers = []
+                    for container in containers:
+                        container_right = container['x'] + container['width']
+                        container_bottom = container['y'] + container['height']
+                        
+                        if container_right > new_width or container_bottom > new_height:
+                            affected_containers.append({
+                                'id': container['id'],
+                                'current_bounds': f"({container['x']}, {container['y']}) to ({container_right}, {container_bottom})",
+                                'exceeds_width': container_right > new_width,
+                                'exceeds_height': container_bottom > new_height
+                            })
+                    
                     # Update canvas size in bridge
                     self.canvas_bridge.canvas_state["canvas_size"] = {
                         "width": new_width,
@@ -656,9 +736,30 @@ class CanvasFunctionExecutor:
                         }
                     })
                     
+                    # Prepare result message
+                    result_msg = f"✅ Canvas resized from {current_size['width']}x{current_size['height']} to {new_width}x{new_height} pixels"
+                    
+                    if affected_containers:
+                        result_msg += f"\n⚠️ Warning: {len(affected_containers)} container(s) may be partially outside the new canvas bounds:"
+                        for container in affected_containers:
+                            result_msg += f"\n   • '{container['id']}' extends to {container['current_bounds']}"
+                        result_msg += f"\n💡 Consider using modify_container to reposition affected containers or use a larger canvas size"
+                    
+                    if containers and not affected_containers:
+                        result_msg += f"\n✅ All {len(containers)} existing containers remain within the new canvas bounds"
+                    
                     return {
                         "status": "success",
-                        "result": f"Canvas resized to {new_width}x{new_height} pixels",
+                        "result": result_msg,
+                        "canvas_size": {"width": new_width, "height": new_height},
+                        "affected_containers": affected_containers,
+                        "function_name": function_name
+                    }
+                    
+                except KeyError as e:
+                    return {
+                        "status": "error",
+                        "result": f"Missing required parameter: {str(e)}",
                         "function_name": function_name
                     }
                 except Exception as e:

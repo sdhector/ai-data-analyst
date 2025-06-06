@@ -10,6 +10,10 @@ import json
 import os
 from typing import Dict, Any, List, Optional
 from openai import OpenAI
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class CanvasLLMClient:
