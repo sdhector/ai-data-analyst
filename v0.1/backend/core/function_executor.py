@@ -701,32 +701,18 @@ class CanvasFunctionExecutor:
                             "function_name": function_name
                         }
                     
-                    # Get current state to check container impacts
+                    # Get current state
                     current_state = self.canvas_bridge.get_canvas_state()
                     current_size = current_state.get('canvas_size', {'width': 800, 'height': 600})
                     containers = current_state.get('containers', [])
                     
-                    # Check if any containers will be outside new bounds
-                    affected_containers = []
-                    for container in containers:
-                        container_right = container['x'] + container['width']
-                        container_bottom = container['y'] + container['height']
-                        
-                        if container_right > new_width or container_bottom > new_height:
-                            affected_containers.append({
-                                'id': container['id'],
-                                'current_bounds': f"({container['x']}, {container['y']}) to ({container_right}, {container_bottom})",
-                                'exceeds_width': container_right > new_width,
-                                'exceeds_height': container_bottom > new_height
-                            })
-                    
-                    # Update canvas size in bridge
+                    # Update canvas size in bridge first
                     self.canvas_bridge.canvas_state["canvas_size"] = {
                         "width": new_width,
                         "height": new_height
                     }
                     
-                    # Send command to frontend
+                    # Send canvas resize command to frontend
                     await self.canvas_bridge.broadcast_to_frontend({
                         "type": "canvas_command",
                         "command": "edit_canvas_size",
@@ -739,22 +725,103 @@ class CanvasFunctionExecutor:
                     # Prepare result message
                     result_msg = f"✅ Canvas resized from {current_size['width']}x{current_size['height']} to {new_width}x{new_height} pixels"
                     
-                    if affected_containers:
-                        result_msg += f"\n⚠️ Warning: {len(affected_containers)} container(s) may be partially outside the new canvas bounds:"
-                        for container in affected_containers:
-                            result_msg += f"\n   • '{container['id']}' extends to {container['current_bounds']}"
-                        result_msg += f"\n💡 Consider using modify_container to reposition affected containers or use a larger canvas size"
-                    
-                    if containers and not affected_containers:
-                        result_msg += f"\n✅ All {len(containers)} existing containers remain within the new canvas bounds"
-                    
-                    return {
-                        "status": "success",
-                        "result": result_msg,
-                        "canvas_size": {"width": new_width, "height": new_height},
-                        "affected_containers": affected_containers,
-                        "function_name": function_name
-                    }
+                    # If there are containers, optimize their layout for the new canvas size
+                    if containers:
+                        try:
+                            # Get all containers for optimization
+                            containers_for_optimization = self._get_all_containers_for_optimization()
+                            
+                            # Calculate optimal layout for new canvas size
+                            optimization_result = self.canvas_bridge.calculate_optimal_layout(
+                                containers_for_optimization, 
+                                new_width, 
+                                new_height
+                            )
+                            
+                            # Apply optimized layout
+                            layout_application = await self._apply_optimized_layout(optimization_result)
+                            
+                            if layout_application["success"]:
+                                metrics = layout_application["metrics"]
+                                
+                                result_msg += f"\n🔧 **Container Optimization Applied:**"
+                                result_msg += f"\n   📊 Optimized {len(containers)} container(s) for new canvas size"
+                                result_msg += f"\n   📏 New layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers"
+                                result_msg += f"\n   📈 Space utilization: {metrics['space_utilization_percent']}%"
+                                result_msg += f"\n   💡 Layout strategy: {layout_application['layout_summary']}"
+                                
+                                # Show details about container adjustments
+                                repositioned_containers = layout_application["container_results"]
+                                if repositioned_containers:
+                                    result_msg += f"\n   🔄 All containers repositioned and resized for optimal fit"
+                                    
+                                    # Show a few examples of the changes
+                                    for i, container_result in enumerate(repositioned_containers[:3]):
+                                        if container_result.get("previous_position") and container_result.get("previous_size"):
+                                            prev_pos = container_result["previous_position"]
+                                            prev_size = container_result["previous_size"]
+                                            new_pos = container_result["optimized_position"]
+                                            new_size = container_result["optimized_size"]
+                                            
+                                            result_msg += f"\n     • '{container_result['container_id']}': {prev_pos} {prev_size} → {new_pos} {new_size}"
+                                    
+                                    if len(repositioned_containers) > 3:
+                                        result_msg += f"\n     • ... and {len(repositioned_containers) - 3} more containers"
+                                
+                                return {
+                                    "status": "success",
+                                    "result": result_msg,
+                                    "canvas_size": {"width": new_width, "height": new_height},
+                                    "optimization_used": True,
+                                    "optimization_details": layout_application,
+                                    "containers_optimized": len(containers),
+                                    "function_name": function_name
+                                }
+                            else:
+                                # Canvas resized but optimization failed
+                                error_msg = layout_application.get("error", "Unknown optimization error")
+                                failed_ops = layout_application.get("failed_operations", [])
+                                
+                                result_msg += f"\n⚠️ **Container optimization failed:** {error_msg}"
+                                if failed_ops:
+                                    failed_ids = [op["container_id"] for op in failed_ops]
+                                    result_msg += f"\n   ❌ Failed to optimize containers: {', '.join(failed_ids)}"
+                                result_msg += f"\n   💡 Containers may need manual adjustment for the new canvas size"
+                                
+                                return {
+                                    "status": "success",
+                                    "result": result_msg,
+                                    "canvas_size": {"width": new_width, "height": new_height},
+                                    "optimization_used": False,
+                                    "optimization_error": error_msg,
+                                    "function_name": function_name
+                                }
+                                
+                        except Exception as optimization_error:
+                            # Canvas resized but optimization crashed
+                            result_msg += f"\n⚠️ **Container optimization error:** {str(optimization_error)}"
+                            result_msg += f"\n   💡 Canvas resized successfully, but containers may need manual adjustment"
+                            
+                            return {
+                                "status": "success",
+                                "result": result_msg,
+                                "canvas_size": {"width": new_width, "height": new_height},
+                                "optimization_used": False,
+                                "optimization_error": str(optimization_error),
+                                "function_name": function_name
+                            }
+                    else:
+                        # No containers to optimize
+                        result_msg += f"\n📝 No containers to optimize"
+                        
+                        return {
+                            "status": "success",
+                            "result": result_msg,
+                            "canvas_size": {"width": new_width, "height": new_height},
+                            "optimization_used": False,
+                            "containers_optimized": 0,
+                            "function_name": function_name
+                        }
                     
                 except KeyError as e:
                     return {

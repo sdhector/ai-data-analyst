@@ -176,7 +176,7 @@ Be helpful, clear, precise, and always confirm successful operations with a fina
             },
             {
                 "name": "edit_canvas_size",
-                "description": "Change the canvas dimensions",
+                "description": "Change the canvas dimensions and automatically optimize all existing containers for the new size. Containers will be repositioned and resized to maintain optimal layout and space utilization.",
                 "parameters": {
                     "type": "object",
                     "properties": {
