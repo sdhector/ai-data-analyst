@@ -13,51 +13,38 @@ This document brainstorms the canvas operations that users should be able to per
 #### Detailed Steps Required:
 
 1. **Input Validation & Processing**
-   - Parse user input (could be "make it bigger", "resize to 1920x1080", "double the width", etc.)
-   - Convert natural language to specific dimensions
-   - Validate dimensions are within acceptable limits
-   - Handle relative vs absolute sizing requests
+   - LLM handles parsing user input and converting natural language to specific dimensions
+   - Function must have comprehensive docstring for LLM to understand requirements
+   - Function handles relative vs absolute sizing (supports both pixels and percentages)
+   - Utility function validates dimensions are within acceptable limits (min/max bounds)
+   - Provide clear feedback to LLM if wrong inputs are provided
 
 2. **Current State Assessment**
-   - Get current canvas dimensions
-   - Get current container positions and sizes
+   - Get current canvas state via utility function
+   - Utility function determines if any containers would fall outside new canvas bounds
    - Identify containers that would be affected by resize
    - Calculate impact on existing layout
 
 3. **Conflict Detection & Resolution**
-   - Identify containers that would be outside new canvas bounds
-   - Determine if containers need to be moved, resized, or removed
-   - Check for overlapping containers after resize
-   - Plan container repositioning strategy
+   - If any containers fall outside new canvas size, resize and rearrange containers first
+   - Use utility function that resizes and rearranges all containers before canvas resize
+   - Ensure all containers fit within intended new canvas dimensions
 
-4. **Pre-resize Preparation**
-   - Create backup of current canvas state
-   - Lock canvas from other modifications
-   - Notify frontend of impending resize operation
-
-5. **Canvas Resize Execution**
+4. **Canvas Resize Execution**
    - Apply new canvas dimensions
    - Broadcast resize command to frontend
-   - Update internal canvas state
+   - Frontend handles updating internal canvas state
 
-6. **Container Adjustment**
-   - Move containers that are now outside bounds
-   - Resize containers if necessary to fit new canvas
-   - Maintain relative positioning where possible
-   - Update container positions in state
-
-7. **Verification & Cleanup**
-   - Verify canvas was resized successfully
+5. **Verification & Cleanup**
+   - Verify canvas was resized successfully via utility function
    - Verify all containers are within bounds
-   - Update layout optimization if needed
-   - Release canvas lock
-   - Clear backup state
+   - Provide operation completion feedback
 
 #### Edge Cases to Handle:
-- Canvas becomes smaller than existing containers
-- Canvas becomes extremely large (performance impact)
-- Multiple containers need repositioning
-- User cancels operation mid-resize
+- **Canvas becomes smaller than existing containers**: Resolved by using resize and reposition utility function with intended canvas size
+- **Canvas becomes extremely large**: Delegated to user for now (see implementation recommendations for future enhancement)
+- **Multiple containers need repositioning**: Managed with resize and reposition containers utility function
+- **User cancels operation mid-resize**: Not allowed - operations are atomic and non-interruptible
 
 ---
 
