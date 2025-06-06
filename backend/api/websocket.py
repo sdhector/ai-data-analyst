@@ -12,6 +12,7 @@ from datetime import datetime
 
 from core.chatbot import core_chatbot as chatbot
 from core.canvas_bridge import canvas_bridge  # Still using old canvas_bridge for now
+from core.utilities import user_feedback_manager
 
 
 class WebSocketManager:
@@ -25,6 +26,7 @@ class WebSocketManager:
         await websocket.accept()
         self.active_connections.add(websocket)
         canvas_bridge.add_websocket_connection(websocket)
+        user_feedback_manager.add_websocket_connection(websocket)  # Register for user feedback
         print(f"[SUCCESS] WebSocket client connected. Total connections: {len(self.active_connections)}")
         
         # Send initial canvas state
@@ -42,6 +44,7 @@ class WebSocketManager:
         """Remove a WebSocket connection"""
         self.active_connections.discard(websocket)
         canvas_bridge.remove_websocket_connection(websocket)
+        user_feedback_manager.remove_websocket_connection(websocket)  # Unregister from user feedback
         print(f"🔌 WebSocket client disconnected. Total connections: {len(self.active_connections)}")
     
     async def send_personal_message(self, message: Dict[str, Any], websocket: WebSocket):

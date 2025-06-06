@@ -15,7 +15,8 @@ from .registry import execute_canvas_management_tool
 from .utilities import (
     log_component_entry,
     log_component_exit,
-    log_handover
+    log_handover,
+    user_feedback_manager
 )
 
 
@@ -63,6 +64,9 @@ class coreFunctionExecutor:
         
         log_component_entry("FUNCTION_EXECUTOR", "execute_function_call", f"{function_name}({arguments})")
         
+        # Send user feedback: tool execution started
+        await user_feedback_manager.notify_tool_start(function_name, arguments)
+        
         try:
             if function_name in self.available_functions:
                 if self.debug_mode:
@@ -77,23 +81,36 @@ class coreFunctionExecutor:
                 if self.debug_mode:
                     self.logger.debug(f"[FUNCTION_EXECUTOR] 🏁 Registry returned: {result.get('status', 'unknown')}")
                 
+                # Send user feedback based on result
+                if result.get('status') == 'success':
+                    await user_feedback_manager.notify_tool_success(function_name, result)
+                else:
+                    error_msg = result.get('error', 'Unknown error occurred')
+                    await user_feedback_manager.notify_tool_error(function_name, error_msg)
+                
                 log_component_exit("FUNCTION_EXECUTOR", "execute_function_call", result.get('status', 'unknown'))
                 return result
             
             else:
+                error_msg = f"Function '{function_name}' not available in core architecture"
+                await user_feedback_manager.notify_tool_error(function_name, error_msg)
+                
                 log_component_exit("FUNCTION_EXECUTOR", "execute_function_call", "ERROR", f"Function not available: {function_name}")
                 return {
                     "status": "error",
-                    "error": f"Function '{function_name}' not available in core  architecture",
+                    "error": error_msg,
                     "available_functions": self.available_functions,
                     "message": f"The function '{function_name}' is not yet implemented in the architecture. Currently available: {', '.join(self.available_functions)}"
                 }
                 
         except Exception as e:
+            error_msg = f"Error executing {function_name}: {str(e)}"
+            await user_feedback_manager.notify_tool_error(function_name, error_msg)
+            
             log_component_exit("FUNCTION_EXECUTOR", "execute_function_call", "EXCEPTION", str(e))
             return {
                 "status": "error",
-                "error": f"Error executing {function_name}: {str(e)}",
+                "error": error_msg,
                 "function_name": function_name
             }
     

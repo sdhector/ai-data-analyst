@@ -350,10 +350,206 @@ body {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
+    flex: 1;
+    position: relative;
 }
 
 .message-icon {
     font-size: var(--font-size-sm);
+}
+
+.message-text {
+    flex: 1;
+}
+
+.message-close {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: var(--font-size-lg);
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: var(--transition-fast);
+    opacity: 0.6;
+    margin-left: var(--spacing-sm);
+}
+
+.message-close:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.1);
+    transform: scale(1.1);
+}
+
+/* Enhanced message types for tool feedback */
+.message.tool_start {
+    background: rgba(255, 193, 7, 0.1);
+    border-left: 3px solid #ffc107;
+    color: #856404;
+}
+
+.message.tool_progress {
+    background: rgba(23, 162, 184, 0.1);
+    border-left: 3px solid var(--info-color);
+    color: var(--info-color);
+}
+
+.message.warning {
+    background: rgba(255, 193, 7, 0.1);
+    border-left: 3px solid #ffc107;
+    color: #856404;
+}
+
+/* Persistent message indicator */
+.message.persistent {
+    border-width: 2px;
+    border-style: solid;
+    border-radius: var(--radius-md);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.message.persistent::before {
+    content: "📌";
+    font-size: 10px;
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    opacity: 0.5;
+}
+
+/* ===== Source Badges ===== */
+.source-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: var(--spacing-sm);
+}
+
+.source-badge.user {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.source-badge.assistant {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.source-badge.system_frontend {
+    background: #e8f5e8;
+    color: #388e3c;
+}
+
+.source-badge.system_backend {
+    background: #fff3e0;
+    color: #f57c00;
+}
+
+/* ===== Message Groups ===== */
+.message-group {
+    margin-bottom: var(--spacing-md);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: var(--shadow-sm);
+}
+
+.message-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--gray-200);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.message-group-header:hover {
+    background: var(--gray-100);
+}
+
+.group-source-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.group-source-badge.system_backend {
+    background: #fff3e0;
+    color: #f57c00;
+}
+
+.group-source-badge.system {
+    background: #e8f5e8;
+    color: #388e3c;
+}
+
+.group-source-badge.assistant {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.group-toggle {
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--gray-600);
+    cursor: pointer;
+    transition: var(--transition-fast);
+    user-select: none;
+}
+
+.group-toggle:hover {
+    color: var(--primary-color);
+    transform: scale(1.1);
+}
+
+.message-group-content {
+    padding: var(--spacing-sm);
+}
+
+.message-group.collapsed .message-group-content {
+    display: none;
+}
+
+.message-group .message {
+    margin-bottom: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-sm);
+}
+
+.message-group .message:last-child {
+    margin-bottom: 0;
+}
+
+/* Source-specific message styling */
+.message.source-user {
+    border-left-color: #1976d2;
+}
+
+.message.source-assistant {
+    border-left-color: #7b1fa2;
+}
+
+.message.source-system_frontend {
+    border-left-color: #388e3c;
+}
+
+.message.source-system_backend {
+    border-left-color: #f57c00;
 }
 
 /* ===== Responsive Design - Compact ===== */

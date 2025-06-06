@@ -15,6 +15,12 @@ from .request_tracker import (
     log_handover
 )
 
+from .user_feedback import (
+    UserFeedbackManager,
+    FeedbackType,
+    user_feedback_manager
+)
+
 __all__ = [
     "RequestTracker",
     "setup_file_logging",
@@ -22,5 +28,8 @@ __all__ = [
     "log_request_end",
     "log_component_entry",
     "log_component_exit",
-    "log_handover"
+    "log_handover",
+    "UserFeedbackManager",
+    "FeedbackType",
+    "user_feedback_manager"
 ] 
