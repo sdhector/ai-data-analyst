@@ -5,7 +5,7 @@
  * VERSION 1.2 - Added move_container and resize_container support
  */
 
-console.log('🚀 Loading Frontend Script v1.2 - with move_container and resize_container support');
+console.log('🚀 Loading Frontend Script v2.0 - Complete canvas management with chat interface');
 
 // Global state management (similar to test frontend)
 window.canvasState = {
@@ -21,14 +21,23 @@ let isConnected = false;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
 
-// Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
+// Initialize when DOM is loaded OR when script loads (for dynamic loading)
+function initializeApp() {
+    console.log('🚀 Initializing AI Data Analyst v0.1...');
     initializeCanvas();
     setupEventListeners();
     updateStateDisplay();
     initializeWebSocket();
-    console.log('AI Data Analyst v0.1 initialized');
-});
+    console.log('✅ AI Data Analyst v0.1 initialized');
+}
+
+// Check if DOM is already loaded (for dynamic script loading)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+    // DOM is already loaded, initialize immediately
+    initializeApp();
+}
 
 /**
  * Initialize WebSocket connection

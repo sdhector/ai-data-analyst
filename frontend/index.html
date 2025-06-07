@@ -54,21 +54,9 @@
         const timestamp = new Date().getTime();
         const random = Math.random().toString(36).substring(7);
         const script = document.createElement('script');
-        script.src = `script-v2.js?v=1.3&t=${timestamp}&r=${random}`;
+        script.src = `script.js?v=2.0&t=${timestamp}&r=${random}`;
         script.onload = function() {
-            console.log('🔄 Script loaded with cache-busting:', timestamp, random);
-            console.log('🔍 Available functions:', typeof executeCanvasCommand !== 'undefined' ? 'executeCanvasCommand found' : 'executeCanvasCommand NOT found');
-            console.log('🔍 setupEventListeners function:', typeof setupEventListeners !== 'undefined' ? 'found' : 'NOT found');
-            console.log('🔍 Chat messages element:', document.getElementById('chatMessages') ? 'found' : 'NOT found');
-            
-            // Check if chat input was created
-            setTimeout(() => {
-                const chatInput = document.getElementById('chatInput');
-                console.log('🔍 Chat input element:', chatInput ? 'found' : 'NOT found');
-                if (!chatInput) {
-                    console.error('❌ Chat input not created! Checking for errors...');
-                }
-            }, 1000);
+            console.log('✅ Frontend script v2.0 loaded successfully');
         };
         script.onerror = function() {
             console.error('❌ Failed to load script!');

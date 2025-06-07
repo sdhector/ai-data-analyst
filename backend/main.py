@@ -158,14 +158,7 @@ class AIDataAnalystServer:
                     return FileResponse(js_path, media_type="application/javascript")
                 raise HTTPException(status_code=404, detail=f"JavaScript file not found at {js_path}")
             
-            @self.app.get("/script-v2.js")
-            async def serve_js_v2():
-                js_path = frontend_dir / "script-v2.js"
-                print(f"[SEARCH] Serving JS v2 from: {js_path}")
-                if js_path.exists():
-                    return FileResponse(js_path, media_type="application/javascript")
-                raise HTTPException(status_code=404, detail=f"JavaScript v2 file not found at {js_path}")
-            
+
             @self.app.get("/favicon.ico")
             async def serve_favicon():
                 # Return a simple 204 No Content to stop the 404 errors
