@@ -41,6 +41,7 @@ class coreFunctionExecutor:
             "set_canvas_dimensions",
             "get_canvas_dimensions",
             "create_container",
+            "create_container_auto",
             "resize_container",
             "move_container",
             "delete_container",

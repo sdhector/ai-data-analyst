@@ -7,7 +7,7 @@ These tools orchestrate primitives with validation and provide rich responses.
 
 import logging
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
 
 # Import primitives
@@ -24,7 +24,11 @@ from ..canvas_bridge import canvas_bridge
 from ..utilities import (
     log_component_entry,
     log_component_exit,
-    log_handover
+    log_handover,
+    AutoLayoutEngine,
+    LayoutConfiguration,
+    ContainerLayout,
+    create_layout_engine
 )
 
 
@@ -436,6 +440,343 @@ async def create_container_tool(container_id: str, x: int, y: int, width: int, h
         }
         
         log_component_exit("TOOL", "create_container_tool", "ERROR", str(e))
+        return error_result
+
+
+async def create_container_auto_tool(
+    container_id: str, 
+    x: Optional[int] = None, 
+    y: Optional[int] = None, 
+    width: Optional[int] = None, 
+    height: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Create a new container with smart auto-layout support.
+    
+    When in auto-layout mode and position/size parameters are omitted,
+    the container will be automatically positioned using intelligent layout algorithms.
+    
+    Args:
+        container_id: Unique identifier for the container (required)
+        x: X coordinate position (optional in auto-layout mode)
+        y: Y coordinate position (optional in auto-layout mode)
+        width: Container width in pixels (optional in auto-layout mode)
+        height: Container height in pixels (optional in auto-layout mode)
+        
+    Returns:
+        Dict with operation result and detailed information
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[TOOL] create_container_auto_tool called with container_id={container_id}, x={x}, y={y}, width={width}, height={height}")
+    
+    log_component_entry("TOOL", "create_container_auto_tool", f"container_id={container_id}, x={x}, y={y}, width={width}, height={height}")
+    
+    try:
+        # Basic validation
+        if not isinstance(container_id, str) or not container_id.strip():
+            return {
+                "status": "error",
+                "message": "Container ID must be a non-empty string",
+                "error_code": "INVALID_CONTAINER_ID",
+                "provided_container_id": container_id,
+                "suggestions": [
+                    "Provide a unique, non-empty string identifier",
+                    "Example: 'container_1', 'data_viz', 'chart_panel'"
+                ]
+            }
+        
+        # Get current layout state and canvas dimensions
+        layout_state = canvas_bridge.get_layout_state()
+        canvas_result = await get_canvas_dimensions_primitive()
+        
+        if canvas_result["status"] != "success":
+            return {
+                "status": "error",
+                "message": "Failed to get current canvas dimensions",
+                "error_code": "CANVAS_STATE_ERROR",
+                "details": canvas_result
+            }
+        
+        canvas_dims = canvas_result["dimensions"]
+        canvas_width = canvas_dims["width"]
+        canvas_height = canvas_dims["height"]
+        
+        # Check if we should use auto-layout
+        use_auto_layout = (
+            layout_state["auto_layout_enabled"] and 
+            layout_state["layout_mode"] == "auto" and
+            (x is None or y is None or width is None or height is None)
+        )
+        
+        if use_auto_layout:
+            if debug_mode:
+                logger.debug(f"[TOOL] Using auto-layout for container creation")
+            
+            # Get existing containers for layout calculation
+            existing_containers = canvas_bridge.canvas_state.get("containers", {})
+            container_count = len(existing_containers) + 1  # +1 for the new container
+            
+            # Create layout configuration
+            config = LayoutConfiguration(
+                canvas_width=canvas_width,
+                canvas_height=canvas_height,
+                container_gap=layout_state["preferences"]["container_gap"],
+                canvas_padding=layout_state["preferences"]["canvas_padding"] or 20,
+                aspect_ratio=1.0,  # Square containers by default
+                min_container_size=50,
+                max_container_size=min(canvas_width, canvas_height) // 2
+            )
+            
+            # For Phase 2: Simple additive auto-layout (position new container only)
+            # Future phases will implement full reflow of existing containers
+            layout_engine = create_layout_engine()
+            
+            if debug_mode:
+                logger.debug(f"[TOOL] Finding position for new container among {len(existing_containers)} existing")
+            
+            # Find a good position for just this container without moving existing ones
+            existing_container_list = list(existing_containers.values())
+            new_container_layout = layout_engine.find_available_position(
+                existing_container_list, config, container_id
+            )
+            
+            if new_container_layout is None:
+                return {
+                    "status": "error",
+                    "message": "Auto-layout failed: No available space for new container",
+                    "error_code": "AUTO_LAYOUT_NO_SPACE",
+                    "suggestions": [
+                        "Try manual positioning with explicit coordinates",
+                        "Consider increasing canvas size",
+                        "Clear some existing containers to make space",
+                        "Reduce container gap or padding in layout preferences"
+                    ]
+                }
+            
+            # Use auto-calculated values, but allow manual overrides
+            final_x = x if x is not None else new_container_layout.x
+            final_y = y if y is not None else new_container_layout.y  
+            final_width = width if width is not None else new_container_layout.width
+            final_height = height if height is not None else new_container_layout.height
+            
+            # Calculate utilization for reporting
+            all_layouts = [new_container_layout]
+            for existing_container in existing_containers.values():
+                all_layouts.append(ContainerLayout(
+                    x=existing_container['x'],
+                    y=existing_container['y'],
+                    width=existing_container['width'],
+                    height=existing_container['height'],
+                    container_id=existing_container['id'],
+                    layout_index=0
+                ))
+            
+            auto_layout_info = {
+                "auto_layout_used": True,
+                "layout_pattern": "additive_positioning",  # Phase 2 uses simple additive positioning
+                "container_count": container_count,
+                "utilization": layout_engine.calculate_canvas_utilization(all_layouts, config),
+                "manual_overrides": {
+                    "x": x is not None,
+                    "y": y is not None,
+                    "width": width is not None,
+                    "height": height is not None
+                }
+            }
+            
+        else:
+            # Manual mode or all parameters provided
+            if x is None or y is None or width is None or height is None:
+                return {
+                    "status": "error",
+                    "message": "Manual layout mode requires all position and size parameters",
+                    "error_code": "MISSING_MANUAL_PARAMETERS",
+                    "current_mode": layout_state["layout_mode"],
+                    "auto_layout_enabled": layout_state["auto_layout_enabled"],
+                    "missing_parameters": [
+                        param for param, value in [("x", x), ("y", y), ("width", width), ("height", height)]
+                        if value is None
+                    ],
+                    "suggestions": [
+                        "Provide all parameters: x, y, width, height",
+                        "Or switch to auto-layout mode with set_layout_mode('auto')",
+                        "Example: create_container('my_container', 100, 50, 200, 150)"
+                    ]
+                }
+            
+            final_x = x
+            final_y = y
+            final_width = width
+            final_height = height
+            
+            auto_layout_info = {
+                "auto_layout_used": False,
+                "manual_positioning": True,
+                "current_mode": layout_state["layout_mode"]
+            }
+        
+        # Validate final parameters
+        if not isinstance(final_x, int) or not isinstance(final_y, int):
+            return {
+                "status": "error",
+                "message": "X and Y coordinates must be integers",
+                "error_code": "INVALID_COORDINATES",
+                "calculated_x": final_x,
+                "calculated_y": final_y
+            }
+        
+        if not isinstance(final_width, int) or not isinstance(final_height, int):
+            return {
+                "status": "error",
+                "message": "Width and height must be integers",
+                "error_code": "INVALID_DIMENSIONS",
+                "calculated_width": final_width,
+                "calculated_height": final_height
+            }
+        
+        if final_x < 0 or final_y < 0:
+            return {
+                "status": "error",
+                "message": "X and Y coordinates must be non-negative",
+                "error_code": "NEGATIVE_COORDINATES",
+                "calculated_x": final_x,
+                "calculated_y": final_y
+            }
+        
+        if final_width <= 0 or final_height <= 0:
+            return {
+                "status": "error",
+                "message": "Width and height must be positive integers",
+                "error_code": "INVALID_SIZE",
+                "calculated_width": final_width,
+                "calculated_height": final_height
+            }
+        
+        # Execute the primitive operation
+        if debug_mode:
+            logger.debug(f"[TOOL] Calling primitive: create_container_primitive({container_id}, {final_x}, {final_y}, {final_width}, {final_height})")
+        
+        log_handover("TOOL", "PRIMITIVE", "create_container", f"container_id={container_id}, x={final_x}, y={final_y}, width={final_width}, height={final_height}")
+        
+        result = await create_container_primitive(container_id, final_x, final_y, final_width, final_height)
+        
+        if debug_mode:
+            logger.debug(f"[TOOL] Primitive returned: {result.get('status', 'unknown')}")
+        
+        # Handle primitive result
+        if result["status"] != "success":
+            # Enhance error messages with auto-layout context
+            error_code = result.get("error_code", "UNKNOWN_ERROR")
+            enhanced_suggestions = []
+            
+            if use_auto_layout and error_code in ["OUT_OF_BOUNDS", "OVERLAP_DETECTED"]:
+                enhanced_suggestions = [
+                    "Auto-layout calculation failed - this may indicate:",
+                    "• Canvas is too small for current container count",
+                    "• Layout preferences need adjustment",
+                    "• Try switching to manual mode for precise control"
+                ]
+            elif error_code == "DUPLICATE_ID":
+                enhanced_suggestions = [
+                    f"Container ID '{container_id}' already exists",
+                    "Try a different unique identifier",
+                    f"Existing containers: {', '.join(result.get('existing_container_ids', []))}"
+                ]
+            else:
+                enhanced_suggestions = [
+                    "Check container parameters and try again",
+                    "Ensure canvas is in a valid state"
+                ]
+            
+            return {
+                "status": "error",
+                "message": result.get("error", "Failed to create container"),
+                "error_code": error_code,
+                "auto_layout_info": auto_layout_info,
+                "primitive_result": result,
+                "suggestions": enhanced_suggestions
+            }
+        
+        # Mark container as auto or manual positioned
+        if use_auto_layout:
+            canvas_bridge.add_container_to_creation_order(container_id)
+            # Don't mark as manual since it was auto-positioned
+        else:
+            canvas_bridge.add_container_to_creation_order(container_id)
+            canvas_bridge.mark_container_as_manual(container_id)
+        
+        # Calculate additional context for successful creation
+        container_area = final_width * final_height
+        canvas_area = canvas_width * canvas_height
+        area_percentage = (container_area / canvas_area) * 100 if canvas_area > 0 else 0
+        
+        # Build comprehensive result
+        final_result = {
+            "status": "success",
+            "message": f"Container '{container_id}' successfully created at position ({final_x}, {final_y}) with size {final_width}x{final_height}",
+            "operation": "create_container_auto",
+            "container": result["container"],
+            "auto_layout_info": auto_layout_info,
+            "canvas_context": {
+                "canvas_size": {"width": canvas_width, "height": canvas_height},
+                "container_area_percentage": round(area_percentage, 1),
+                "total_containers": result["total_containers"]
+            },
+            "positioning": {
+                "distance_from_edges": {
+                    "left": final_x,
+                    "top": final_y,
+                    "right": canvas_width - (final_x + final_width),
+                    "bottom": canvas_height - (final_y + final_height)
+                }
+            },
+            "layout_state": {
+                "current_mode": layout_state["layout_mode"],
+                "auto_layout_enabled": layout_state["auto_layout_enabled"],
+                "container_creation_order": layout_state["container_creation_order"] + [container_id]
+            },
+            "recommendations": [],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Add mode-specific recommendations
+        if use_auto_layout:
+            final_result["recommendations"].extend([
+                f"Auto-layout positioned container using {auto_layout_info.get('layout_pattern', 'grid')} pattern",
+                f"Container occupies {area_percentage:.1f}% of canvas area",
+                f"Canvas utilization: {auto_layout_info.get('utilization', {}).get('utilization_percentage', 0):.1f}%"
+            ])
+        else:
+            final_result["recommendations"].extend([
+                f"Manual positioning used - container occupies {area_percentage:.1f}% of canvas area",
+                f"Canvas now has {result['total_containers']} container(s)",
+                "Consider auto-layout mode for intelligent positioning of future containers"
+            ])
+        
+        final_result["recommendations"].append("Container is ready for content or further modifications")
+        
+        log_component_exit("TOOL", "create_container_auto_tool", "SUCCESS", f"Created {container_id} at ({final_x},{final_y})")
+        return final_result
+        
+    except Exception as e:
+        error_result = {
+            "status": "error",
+            "message": f"Unexpected error creating container: {str(e)}",
+            "error_code": "UNEXPECTED_ERROR",
+            "provided_parameters": {
+                "container_id": container_id,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "create_container_auto_tool", "ERROR", str(e))
         return error_result
 
 

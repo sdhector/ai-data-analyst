@@ -21,6 +21,13 @@ from .user_feedback import (
     user_feedback_manager
 )
 
+from .auto_layout_engine import (
+    AutoLayoutEngine,
+    ContainerLayout,
+    LayoutConfiguration,
+    create_layout_engine
+)
+
 __all__ = [
     "RequestTracker",
     "setup_file_logging",
@@ -31,5 +38,9 @@ __all__ = [
     "log_handover",
     "UserFeedbackManager",
     "FeedbackType",
-    "user_feedback_manager"
+    "user_feedback_manager",
+    "AutoLayoutEngine",
+    "ContainerLayout", 
+    "LayoutConfiguration",
+    "create_layout_engine"
 ] 

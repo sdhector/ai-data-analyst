@@ -12,6 +12,7 @@ from ..tools import (
     set_canvas_dimensions_tool,
     get_canvas_dimensions_tool,
     create_container_tool,
+    create_container_auto_tool,
     resize_container_tool,
     move_container_tool,
     delete_container_tool,
@@ -96,6 +97,41 @@ def get_canvas_management_function_schemas() -> List[Dict[str, Any]]:
                     }
                 },
                 "required": ["container_id", "x", "y", "width", "height"]
+            }
+        },
+        {
+            "name": "create_container_auto",
+            "description": "Create a new container with intelligent auto-layout support. Position and size parameters are optional when in auto-layout mode.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "container_id": {
+                        "type": "string",
+                        "description": "Unique identifier for the container (must be non-empty string)",
+                        "minLength": 1
+                    },
+                    "x": {
+                        "type": "integer",
+                        "description": "X coordinate position on canvas (optional in auto-layout mode)",
+                        "minimum": 0
+                    },
+                    "y": {
+                        "type": "integer",
+                        "description": "Y coordinate position on canvas (optional in auto-layout mode)",
+                        "minimum": 0
+                    },
+                    "width": {
+                        "type": "integer",
+                        "description": "Container width in pixels (optional in auto-layout mode)",
+                        "minimum": 1
+                    },
+                    "height": {
+                        "type": "integer",
+                        "description": "Container height in pixels (optional in auto-layout mode)",
+                        "minimum": 1
+                    }
+                },
+                "required": ["container_id"]
             }
         },
         {
@@ -322,6 +358,42 @@ async def execute_canvas_management_tool(function_name: str, arguments: Dict[str
             log_component_exit("REGISTRY", "execute_canvas_management_tool", result.get('status', 'unknown'))
             return result
             
+        elif function_name == "create_container_auto":
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🎯 Executing create_container_auto tool")
+            
+            container_id = arguments.get("container_id")
+            x = arguments.get("x")
+            y = arguments.get("y")
+            width = arguments.get("width")
+            height = arguments.get("height")
+            
+            # Check for missing required parameters
+            if container_id is None:
+                if debug_mode:
+                    logger.debug(f"[REGISTRY] ❌ Missing parameters for create_container_auto: container_id")
+                return {
+                    "status": "error",
+                    "message": "Missing required parameter: container_id",
+                    "error_code": "MISSING_PARAMETERS",
+                    "required_parameters": ["container_id"],
+                    "missing_parameters": ["container_id"],
+                    "provided_arguments": arguments
+                }
+            
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🔄 Calling create_container_auto_tool({container_id}, {x}, {y}, {width}, {height})")
+            
+            log_handover("REGISTRY", "TOOL", "create_container_auto", f"container_id={container_id}, x={x}, y={y}, width={width}, height={height}")
+            
+            result = await create_container_auto_tool(container_id, x, y, width, height)
+            
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🏁 Tool returned: {result.get('status', 'unknown')}")
+            
+            log_component_exit("REGISTRY", "execute_canvas_management_tool", result.get('status', 'unknown'))
+            return result
+            
         elif function_name == "resize_container":
             if debug_mode:
                 logger.debug(f"[REGISTRY] 🎯 Executing resize_container tool")
@@ -513,7 +585,7 @@ async def execute_canvas_management_tool(function_name: str, arguments: Dict[str
                 "status": "error",
                 "message": f"Unknown canvas management function: {function_name}",
                 "error_code": "UNKNOWN_FUNCTION",
-                "available_functions": ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container", "move_container", "delete_container", "clear_canvas", "set_layout_mode", "get_layout_mode"],
+                "available_functions": ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "create_container_auto", "resize_container", "move_container", "delete_container", "clear_canvas", "set_layout_mode", "get_layout_mode"],
                 "requested_function": function_name
             }
             
@@ -541,6 +613,7 @@ def get_tool_by_name(tool_name: str) -> callable:
         "set_canvas_dimensions": set_canvas_dimensions_tool,
         "get_canvas_dimensions": get_canvas_dimensions_tool,
         "create_container": create_container_tool,
+        "create_container_auto": create_container_auto_tool,
         "resize_container": resize_container_tool,
         "move_container": move_container_tool,
         "delete_container": delete_container_tool,
@@ -582,6 +655,13 @@ def get_tool_metadata(tool_name: str) -> Dict[str, Any]:
             "category": "canvas_management",
             "parameters": ["container_id", "x", "y", "width", "height"],
             "returns": "Container creation result with positioning context and recommendations"
+        },
+        "create_container_auto": {
+            "name": "create_container_auto",
+            "description": "Create a new container with intelligent auto-layout support",
+            "category": "canvas_management",
+            "parameters": ["container_id", "x", "y", "width", "height"],
+            "returns": "Container creation result with auto-layout analysis and positioning context"
         },
         "resize_container": {
             "name": "resize_container",
@@ -636,4 +716,4 @@ def list_available_tools() -> List[str]:
     Returns:
         List of tool names
     """
-    return ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container", "move_container", "delete_container", "clear_canvas", "set_layout_mode", "get_layout_mode"] 
+    return ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "create_container_auto", "resize_container", "move_container", "delete_container", "clear_canvas", "set_layout_mode", "get_layout_mode"] 
