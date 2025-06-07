@@ -166,6 +166,12 @@ class AIDataAnalystServer:
                     return FileResponse(js_path, media_type="application/javascript")
                 raise HTTPException(status_code=404, detail=f"JavaScript v2 file not found at {js_path}")
             
+            @self.app.get("/favicon.ico")
+            async def serve_favicon():
+                # Return a simple 204 No Content to stop the 404 errors
+                from fastapi import Response
+                return Response(status_code=204)
+            
             print(f"[SUCCESS] Frontend static files mounted from: {frontend_dir}")
         else:
             print(f"[WARNING] Frontend directory not found: {frontend_dir}")
