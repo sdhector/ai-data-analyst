@@ -10,7 +10,8 @@ import os
 from typing import Dict, Any, List
 from ..tools import (
     set_canvas_dimensions_tool,
-    get_canvas_dimensions_tool
+    get_canvas_dimensions_tool,
+    create_container_tool
 )
 from ..utilities import (
     log_component_entry,
@@ -54,6 +55,41 @@ def get_canvas_management_function_schemas() -> List[Dict[str, Any]]:
                 "type": "object",
                 "properties": {},
                 "required": []
+            }
+        },
+        {
+            "name": "create_container",
+            "description": "Create a new container at a specified position on the canvas with given dimensions",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "container_id": {
+                        "type": "string",
+                        "description": "Unique identifier for the container (must be non-empty string)",
+                        "minLength": 1
+                    },
+                    "x": {
+                        "type": "integer",
+                        "description": "X coordinate position on canvas (must be non-negative)",
+                        "minimum": 0
+                    },
+                    "y": {
+                        "type": "integer",
+                        "description": "Y coordinate position on canvas (must be non-negative)",
+                        "minimum": 0
+                    },
+                    "width": {
+                        "type": "integer",
+                        "description": "Container width in pixels (must be positive)",
+                        "minimum": 1
+                    },
+                    "height": {
+                        "type": "integer",
+                        "description": "Container height in pixels (must be positive)",
+                        "minimum": 1
+                    }
+                },
+                "required": ["container_id", "x", "y", "width", "height"]
             }
         }
     ]
@@ -126,12 +162,60 @@ async def execute_canvas_management_tool(function_name: str, arguments: Dict[str
             log_component_exit("REGISTRY", "execute_canvas_management_tool", result.get('status', 'unknown'))
             return result
             
+        elif function_name == "create_container":
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🎯 Executing create_container tool")
+            
+            container_id = arguments.get("container_id")
+            x = arguments.get("x")
+            y = arguments.get("y")
+            width = arguments.get("width")
+            height = arguments.get("height")
+            
+            # Check for missing required parameters
+            missing_params = []
+            if container_id is None:
+                missing_params.append("container_id")
+            if x is None:
+                missing_params.append("x")
+            if y is None:
+                missing_params.append("y")
+            if width is None:
+                missing_params.append("width")
+            if height is None:
+                missing_params.append("height")
+            
+            if missing_params:
+                if debug_mode:
+                    logger.debug(f"[REGISTRY] ❌ Missing parameters for create_container: {missing_params}")
+                return {
+                    "status": "error",
+                    "message": f"Missing required parameters: {', '.join(missing_params)}",
+                    "error_code": "MISSING_PARAMETERS",
+                    "required_parameters": ["container_id", "x", "y", "width", "height"],
+                    "missing_parameters": missing_params,
+                    "provided_arguments": arguments
+                }
+            
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🔄 Calling create_container_tool({container_id}, {x}, {y}, {width}, {height})")
+            
+            log_handover("REGISTRY", "TOOL", "create_container", f"container_id={container_id}, x={x}, y={y}, width={width}, height={height}")
+            
+            result = await create_container_tool(container_id, x, y, width, height)
+            
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🏁 Tool returned: {result.get('status', 'unknown')}")
+            
+            log_component_exit("REGISTRY", "execute_canvas_management_tool", result.get('status', 'unknown'))
+            return result
+            
         else:
             return {
                 "status": "error",
                 "message": f"Unknown canvas management function: {function_name}",
                 "error_code": "UNKNOWN_FUNCTION",
-                "available_functions": ["set_canvas_dimensions", "get_canvas_dimensions"],
+                "available_functions": ["set_canvas_dimensions", "get_canvas_dimensions", "create_container"],
                 "requested_function": function_name
             }
             
@@ -157,7 +241,8 @@ def get_tool_by_name(tool_name: str) -> callable:
     """
     tools = {
         "set_canvas_dimensions": set_canvas_dimensions_tool,
-        "get_canvas_dimensions": get_canvas_dimensions_tool
+        "get_canvas_dimensions": get_canvas_dimensions_tool,
+        "create_container": create_container_tool
     }
     return tools.get(tool_name)
 
@@ -186,6 +271,13 @@ def get_tool_metadata(tool_name: str) -> Dict[str, Any]:
             "category": "canvas_management",
             "parameters": [],
             "returns": "Current dimensions with metadata and analysis"
+        },
+        "create_container": {
+            "name": "create_container",
+            "description": "Create a new container with validation and intelligent feedback",
+            "category": "canvas_management",
+            "parameters": ["container_id", "x", "y", "width", "height"],
+            "returns": "Container creation result with positioning context and recommendations"
         }
     }
     return metadata.get(tool_name, {})
@@ -198,4 +290,4 @@ def list_available_tools() -> List[str]:
     Returns:
         List of tool names
     """
-    return ["set_canvas_dimensions", "get_canvas_dimensions"] 
+    return ["set_canvas_dimensions", "get_canvas_dimensions", "create_container"] 

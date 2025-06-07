@@ -13,7 +13,8 @@ from datetime import datetime
 # Import primitives
 from ..primitives import (
     set_canvas_dimensions_primitive,
-    get_canvas_dimensions_primitive
+    get_canvas_dimensions_primitive,
+    create_container_primitive
 )
 from ..utilities import (
     log_component_entry,
@@ -224,4 +225,210 @@ async def get_canvas_dimensions_tool() -> Dict[str, Any]:
         }
         
         log_component_exit("TOOL", "get_canvas_dimensions_tool", "ERROR", str(e))
+        return error_result
+
+
+async def create_container_tool(container_id: str, x: int, y: int, width: int, height: int) -> Dict[str, Any]:
+    """
+    Create a new container with validation and intelligent feedback.
+    
+    Args:
+        container_id: Unique identifier for the container (must be non-empty string)
+        x: X coordinate position on canvas (must be non-negative integer)
+        y: Y coordinate position on canvas (must be non-negative integer)
+        width: Container width in pixels (must be positive integer)
+        height: Container height in pixels (must be positive integer)
+        
+    Returns:
+        Dict with operation result and detailed information
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[TOOL] create_container_tool called with container_id={container_id}, x={x}, y={y}, width={width}, height={height}")
+    
+    log_component_entry("TOOL", "create_container_tool", f"container_id={container_id}, x={x}, y={y}, width={width}, height={height}")
+    
+    try:
+        # Basic validation
+        if not isinstance(container_id, str) or not container_id.strip():
+            return {
+                "status": "error",
+                "message": "Container ID must be a non-empty string",
+                "error_code": "INVALID_CONTAINER_ID",
+                "provided_container_id": container_id,
+                "suggestions": [
+                    "Provide a unique, non-empty string identifier",
+                    "Example: 'container_1', 'data_viz', 'chart_panel'"
+                ]
+            }
+        
+        if not isinstance(x, int) or not isinstance(y, int):
+            return {
+                "status": "error",
+                "message": "X and Y coordinates must be integers",
+                "error_code": "INVALID_COORDINATES",
+                "provided_x": x,
+                "provided_y": y,
+                "suggestions": [
+                    "Provide X and Y as non-negative integers",
+                    "Example: create_container('my_container', 100, 50, 200, 150)"
+                ]
+            }
+        
+        if not isinstance(width, int) or not isinstance(height, int):
+            return {
+                "status": "error",
+                "message": "Width and height must be integers",
+                "error_code": "INVALID_DIMENSIONS",
+                "provided_width": width,
+                "provided_height": height,
+                "suggestions": [
+                    "Provide width and height as positive integers",
+                    "Minimum recommended size: 50x50",
+                    "Common sizes: 200x150, 300x200, 400x300"
+                ]
+            }
+        
+        if x < 0 or y < 0:
+            return {
+                "status": "error",
+                "message": "X and Y coordinates must be non-negative",
+                "error_code": "NEGATIVE_COORDINATES",
+                "provided_x": x,
+                "provided_y": y,
+                "suggestions": [
+                    "Use coordinates >= 0",
+                    "Top-left corner of canvas is (0, 0)"
+                ]
+            }
+        
+        if width <= 0 or height <= 0:
+            return {
+                "status": "error",
+                "message": "Width and height must be positive integers",
+                "error_code": "INVALID_SIZE",
+                "provided_width": width,
+                "provided_height": height,
+                "suggestions": [
+                    "Use positive values greater than 0",
+                    "Minimum recommended size: 50x50",
+                    "Consider the canvas size when choosing dimensions"
+                ]
+            }
+        
+        # Get current canvas dimensions for context
+        canvas_result = await get_canvas_dimensions_primitive()
+        if canvas_result["status"] != "success":
+            return {
+                "status": "error",
+                "message": "Failed to get current canvas dimensions",
+                "error_code": "CANVAS_STATE_ERROR",
+                "details": canvas_result
+            }
+        
+        canvas_dims = canvas_result["dimensions"]
+        canvas_width = canvas_dims["width"]
+        canvas_height = canvas_dims["height"]
+        
+        # Execute the primitive operation
+        if debug_mode:
+            logger.debug(f"[TOOL] Calling primitive: create_container_primitive({container_id}, {x}, {y}, {width}, {height})")
+        
+        log_handover("TOOL", "PRIMITIVE", "create_container", f"container_id={container_id}, x={x}, y={y}, width={width}, height={height}")
+        
+        result = await create_container_primitive(container_id, x, y, width, height)
+        
+        if debug_mode:
+            logger.debug(f"[TOOL] Primitive returned: {result.get('status', 'unknown')}")
+        
+        if result["status"] != "success":
+            # Enhance error messages with helpful suggestions
+            error_code = result.get("error_code", "UNKNOWN_ERROR")
+            enhanced_suggestions = []
+            
+            if error_code == "DUPLICATE_ID":
+                enhanced_suggestions = [
+                    f"Container ID '{container_id}' already exists",
+                    "Try a different unique identifier",
+                    f"Existing containers: {', '.join(result.get('existing_container_ids', []))}"
+                ]
+            elif error_code == "OUT_OF_BOUNDS":
+                enhanced_suggestions = [
+                    f"Container extends outside canvas bounds ({canvas_width}x{canvas_height})",
+                    f"Reduce size or move position to fit within canvas",
+                    f"Maximum position for {width}x{height} container: ({canvas_width-width}, {canvas_height-height})"
+                ]
+            elif error_code == "OVERLAP_DETECTED":
+                overlapping = result.get("overlapping_containers", [])
+                enhanced_suggestions = [
+                    f"Container overlaps with existing containers: {', '.join(overlapping)}",
+                    "Try a different position or size",
+                    "Use get_canvas_state to see existing container positions"
+                ]
+            else:
+                enhanced_suggestions = [
+                    "Check container parameters and try again",
+                    "Ensure canvas is in a valid state"
+                ]
+            
+            return {
+                "status": "error",
+                "message": result.get("error", "Failed to create container"),
+                "error_code": error_code,
+                "primitive_result": result,
+                "suggestions": enhanced_suggestions
+            }
+        
+        # Calculate additional context for successful creation
+        container_area = width * height
+        canvas_area = canvas_width * canvas_height
+        area_percentage = (container_area / canvas_area) * 100 if canvas_area > 0 else 0
+        
+        final_result = {
+            "status": "success",
+            "message": f"Container '{container_id}' successfully created at position ({x}, {y}) with size {width}x{height}",
+            "operation": "create_container",
+            "container": result["container"],
+            "canvas_context": {
+                "canvas_size": {"width": canvas_width, "height": canvas_height},
+                "container_area_percentage": round(area_percentage, 1),
+                "total_containers": result["total_containers"]
+            },
+            "positioning": {
+                "distance_from_edges": {
+                    "left": x,
+                    "top": y,
+                    "right": canvas_width - (x + width),
+                    "bottom": canvas_height - (y + height)
+                }
+            },
+            "recommendations": [
+                f"Container occupies {area_percentage:.1f}% of canvas area",
+                f"Canvas now has {result['total_containers']} container(s)",
+                "Container is ready for content or further modifications"
+            ],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "create_container_tool", "SUCCESS", f"Created {container_id} at ({x},{y})")
+        return final_result
+        
+    except Exception as e:
+        error_result = {
+            "status": "error",
+            "message": f"Unexpected error creating container: {str(e)}",
+            "error_code": "UNEXPECTED_ERROR",
+            "provided_parameters": {
+                "container_id": container_id,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "create_container_tool", "ERROR", str(e))
         return error_result 

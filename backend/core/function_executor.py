@@ -39,7 +39,8 @@ class coreFunctionExecutor:
         # Available functions in core  (currently only canvas management operations)
         self.available_functions = [
             "set_canvas_dimensions",
-            "get_canvas_dimensions"
+            "get_canvas_dimensions",
+            "create_container"
         ]
         
         if self.debug_mode:

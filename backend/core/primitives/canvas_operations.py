@@ -150,4 +150,199 @@ async def get_canvas_dimensions_primitive() -> Dict[str, Any]:
         }
         
         log_component_exit("PRIMITIVE", "get_canvas_dimensions_primitive", "ERROR", str(e))
+        return error_result
+
+
+async def create_container_primitive(container_id: str, x: int, y: int, width: int, height: int) -> Dict[str, Any]:
+    """
+    Create a new container directly.
+    
+    Args:
+        container_id: Unique identifier for the container
+        x: X coordinate position on canvas
+        y: Y coordinate position on canvas
+        width: Container width in pixels
+        height: Container height in pixels
+        
+    Returns:
+        Dict with operation result and details
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[PRIMITIVE] create_container_primitive STARTED with container_id={container_id}, x={x}, y={y}, width={width}, height={height}")
+    
+    log_component_entry("PRIMITIVE", "create_container_primitive", f"container_id={container_id}, x={x}, y={y}, width={width}, height={height}")
+    
+    try:
+        # Validate container_id uniqueness
+        existing_containers = canvas_bridge.canvas_state.get("containers", {})
+        if container_id in existing_containers:
+            error_result = {
+                "status": "error",
+                "operation": "create_container",
+                "error": f"Container ID '{container_id}' already exists",
+                "error_code": "DUPLICATE_ID",
+                "existing_container_ids": list(existing_containers.keys()),
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "create_container_primitive", "ERROR", f"Duplicate ID: {container_id}")
+            return error_result
+        
+        # Validate coordinates and dimensions
+        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+            error_result = {
+                "status": "error",
+                "operation": "create_container",
+                "error": "X and Y coordinates must be numeric",
+                "error_code": "INVALID_COORDINATES",
+                "provided_x": x,
+                "provided_y": y,
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "create_container_primitive", "ERROR", "Invalid coordinates")
+            return error_result
+        
+        if not isinstance(width, (int, float)) or not isinstance(height, (int, float)) or width <= 0 or height <= 0:
+            error_result = {
+                "status": "error",
+                "operation": "create_container",
+                "error": "Width and height must be positive numeric values",
+                "error_code": "INVALID_DIMENSIONS",
+                "provided_width": width,
+                "provided_height": height,
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "create_container_primitive", "ERROR", "Invalid dimensions")
+            return error_result
+        
+        # Convert to integers for consistency
+        x, y, width, height = int(x), int(y), int(width), int(height)
+        
+        # Validate placement within canvas bounds
+        canvas_size = canvas_bridge.get_canvas_size()
+        canvas_width = canvas_size.get('width', 800)
+        canvas_height = canvas_size.get('height', 600)
+        
+        if x < 0 or y < 0 or x + width > canvas_width or y + height > canvas_height:
+            error_result = {
+                "status": "error",
+                "operation": "create_container",
+                "error": "Container bounding box extends outside canvas boundaries",
+                "error_code": "OUT_OF_BOUNDS",
+                "canvas_size": {"width": canvas_width, "height": canvas_height},
+                "container_bounds": {"x": x, "y": y, "width": width, "height": height},
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "create_container_primitive", "ERROR", "Out of bounds")
+            return error_result
+        
+        # Validate no overlap with existing containers
+        existing_container_list = canvas_bridge.get_existing_containers()
+        overlapping_containers = []
+        
+        for existing in existing_container_list:
+            if canvas_bridge.check_overlap(x, y, width, height, 
+                                         existing['x'], existing['y'], 
+                                         existing['width'], existing['height']):
+                overlapping_containers.append(existing['id'])
+        
+        if overlapping_containers:
+            error_result = {
+                "status": "error",
+                "operation": "create_container",
+                "error": "Container overlaps with existing containers",
+                "error_code": "OVERLAP_DETECTED",
+                "overlapping_containers": overlapping_containers,
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "create_container_primitive", "ERROR", f"Overlaps with: {overlapping_containers}")
+            return error_result
+        
+        # Generate unique command ID for tracking
+        import uuid
+        command_id = f"cmd_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+        
+        # Create container in canvas state
+        canvas_bridge.canvas_state["containers"][container_id] = {
+            "id": container_id,
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+            "created_at": datetime.now().isoformat()
+        }
+        canvas_bridge.canvas_state["last_updated"] = datetime.now().isoformat()
+        
+        # Broadcast container creation command to frontend
+        create_message = {
+            "type": "canvas_command",
+            "command": "create_container",
+            "command_id": command_id,
+            "data": {
+                "container_id": container_id,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height
+            }
+        }
+        
+        # Check if there are any WebSocket connections
+        connection_count = len(canvas_bridge.websocket_connections)
+        print(f"[PRIMITIVE] Broadcasting container creation to {connection_count} WebSocket connection(s)")
+        
+        if connection_count == 0:
+            print("[WARNING] No WebSocket connections found - frontend may not be connected!")
+        
+        # Track the pending command
+        canvas_bridge.track_pending_command(command_id, "create_container", {
+            "container_id": container_id,
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height
+        })
+        
+        await canvas_bridge.broadcast_to_frontend(create_message)
+        
+        print(f"[PRIMITIVE] Container '{container_id}' created at ({x}, {y}) with size {width}x{height}")
+        
+        if debug_mode:
+            logger.debug(f"[PRIMITIVE] create_container_primitive COMPLETED successfully")
+        
+        result = {
+            "status": "success",
+            "operation": "create_container",
+            "container": {
+                "id": container_id,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height
+            },
+            "canvas_size": {"width": canvas_width, "height": canvas_height},
+            "total_containers": len(canvas_bridge.canvas_state["containers"]),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("PRIMITIVE", "create_container_primitive", "SUCCESS", f"Created {container_id} at ({x},{y})")
+        return result
+        
+    except Exception as e:
+        print(f"[PRIMITIVE ERROR] Failed to create container: {e}")
+        
+        if debug_mode:
+            logger.debug(f"[PRIMITIVE] create_container_primitive FAILED: {e}")
+        
+        error_result = {
+            "status": "error",
+            "operation": "create_container",
+            "error": str(e),
+            "error_code": "UNEXPECTED_ERROR",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("PRIMITIVE", "create_container_primitive", "ERROR", str(e))
         return error_result 
