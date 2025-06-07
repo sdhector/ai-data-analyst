@@ -44,6 +44,16 @@
         </main>
     </div>
 
-    <script src="script.js?v=1.1"></script>
+    <script>
+        // Force cache refresh with timestamp
+        const timestamp = new Date().getTime();
+        const script = document.createElement('script');
+        script.src = `script.js?v=1.2&t=${timestamp}`;
+        script.onload = function() {
+            console.log('🔄 Script loaded with cache-busting timestamp:', timestamp);
+            console.log('🔍 Available functions:', typeof executeCanvasCommand !== 'undefined' ? 'executeCanvasCommand found' : 'executeCanvasCommand NOT found');
+        };
+        document.head.appendChild(script);
+    </script>
 </body>
 </html> 

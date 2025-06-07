@@ -2,7 +2,10 @@
  * AI Data Analyst v0.1 - Simplified Frontend
  * Combines production styling with test frontend functionality
  * Now includes WebSocket communication with the backend chatbot
+ * VERSION 1.2 - Added move_container and resize_container support
  */
+
+console.log('🚀 Loading Frontend Script v1.2 - with move_container and resize_container support');
 
 // Global state management (similar to test frontend)
 window.canvasState = {
@@ -278,7 +281,8 @@ function handleUserFeedback(message) {
  * Execute canvas command from backend
  */
 function executeCanvasCommand(command, data, commandId = null) {
-    console.log(`🎨 Executing canvas command: ${command}`, data);
+    console.log(`🎨 [v1.2] Executing canvas command: ${command}`, data);
+    console.log(`🔍 [v1.2] Available cases: create_container, delete_container, modify_container, move_container, resize_container, clear_canvas, edit_canvas_size, take_screenshot`);
     
     switch (command) {
         case 'create_container':
