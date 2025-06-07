@@ -92,7 +92,16 @@ class coreFunctionExecutor:
                 if result.get('status') == 'success':
                     await user_feedback_manager.notify_tool_success(function_name, result)
                 else:
-                    error_msg = result.get('error', 'Unknown error occurred')
+                    # Get detailed error message - tools use 'message' field, not 'error'
+                    error_msg = result.get('message') or result.get('error', 'Unknown error occurred')
+                    
+                    # Add error code and suggestions if available
+                    if result.get('error_code'):
+                        error_msg += f" (Code: {result['error_code']})"
+                    
+                    if result.get('suggestions'):
+                        error_msg += f" Suggestions: {'; '.join(result['suggestions'])}"
+                    
                     await user_feedback_manager.notify_tool_error(function_name, error_msg)
                 
                 log_component_exit("FUNCTION_EXECUTOR", "execute_function_call", result.get('status', 'unknown'))

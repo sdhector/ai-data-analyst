@@ -288,6 +288,20 @@ async def create_container_tool(
         # Get current layout state to determine behavior
         layout_state = canvas_bridge.get_layout_state()
         
+        # Get current canvas dimensions first (needed for both auto and manual modes)
+        canvas_result = await get_canvas_dimensions_primitive()
+        if canvas_result["status"] != "success":
+            return {
+                "status": "error",
+                "message": "Failed to get current canvas dimensions",
+                "error_code": "CANVAS_STATE_ERROR",
+                "details": canvas_result
+            }
+        
+        canvas_dims = canvas_result["dimensions"]
+        canvas_width = canvas_dims["width"]
+        canvas_height = canvas_dims["height"]
+        
         # Check if we should use auto-layout
         use_auto_layout = (
             layout_state["auto_layout_enabled"] and 
@@ -417,19 +431,7 @@ async def create_container_tool(
                 ]
             }
         
-        # Get current canvas dimensions for context
-        canvas_result = await get_canvas_dimensions_primitive()
-        if canvas_result["status"] != "success":
-            return {
-                "status": "error",
-                "message": "Failed to get current canvas dimensions",
-                "error_code": "CANVAS_STATE_ERROR",
-                "details": canvas_result
-            }
-        
-        canvas_dims = canvas_result["dimensions"]
-        canvas_width = canvas_dims["width"]
-        canvas_height = canvas_dims["height"]
+        # Canvas dimensions already retrieved above
         
         # Execute the primitive operation
         if debug_mode:
