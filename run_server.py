@@ -17,6 +17,14 @@ def main():
     """Main entry point"""
     print("Starting AI Data Analyst...")
     
+    # Check for debug mode
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    if debug_mode:
+        print("🐛 DEBUG MODE ENABLED")
+        print("   Detailed logging will be available in console and debug.log")
+        print("   To disable: unset DEBUG_MODE or set DEBUG_MODE=false")
+        print()
+    
     # Check for OpenAI API key
     if not os.getenv("OPENAI_API_KEY"):
         print("Warning: OPENAI_API_KEY environment variable not set.")

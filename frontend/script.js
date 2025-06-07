@@ -2,7 +2,10 @@
  * AI Data Analyst v0.1 - Simplified Frontend
  * Combines production styling with test frontend functionality
  * Now includes WebSocket communication with the backend chatbot
+ * VERSION 1.2 - Added move_container and resize_container support
  */
+
+console.log('🚀 Loading Frontend Script v2.0 - Complete canvas management with chat interface');
 
 // Global state management (similar to test frontend)
 window.canvasState = {
@@ -18,14 +21,23 @@ let isConnected = false;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
 
-// Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
+// Initialize when DOM is loaded OR when script loads (for dynamic loading)
+function initializeApp() {
+    console.log('🚀 Initializing AI Data Analyst v0.1...');
     initializeCanvas();
     setupEventListeners();
     updateStateDisplay();
     initializeWebSocket();
-    console.log('AI Data Analyst v0.1 initialized');
-});
+    console.log('✅ AI Data Analyst v0.1 initialized');
+}
+
+// Check if DOM is already loaded (for dynamic script loading)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+    // DOM is already loaded, initialize immediately
+    initializeApp();
+}
 
 /**
  * Initialize WebSocket connection
@@ -118,7 +130,7 @@ function handleWebSocketMessage(message) {
             break;
             
         case 'canvas_command':
-            executeCanvasCommand(message.command, message.data);
+            executeCanvasCommand(message.command, message.data, message.command_id);
             break;
             
         case 'canvas_update':
@@ -134,6 +146,11 @@ function handleWebSocketMessage(message) {
             // Handle ping/pong for keepalive
             break;
             
+        case 'user_feedback':
+            // Handle user feedback messages from backend
+            handleUserFeedback(message);
+            break;
+            
         default:
             console.warn('⚠️ Unknown message type:', message.type);
     }
@@ -144,50 +161,201 @@ function handleWebSocketMessage(message) {
  */
 function handleChatResponse(response) {
     if (response.success) {
-        addMessage(response.message, 'success');
+        addMessage(response.message, 'success', { 
+            source: 'assistant',
+            persistent: true,
+            groupId: response.request_id ? `response_${response.request_id}` : null
+        });
         
         // If function calls were made, the canvas should update automatically
         if (response.function_calls_made > 0) {
             console.log(`🔧 ${response.function_calls_made} function call(s) executed`);
         }
     } else {
-        addMessage(response.message, 'error');
+        addMessage(response.message, 'error', { 
+            source: 'assistant',
+            persistent: true 
+        });
+    }
+}
+
+/**
+ * Get display name for message source
+ */
+function getSourceDisplayName(source) {
+    switch (source) {
+        case 'user': return 'You';
+        case 'assistant': return 'Assistant';
+        case 'system_frontend': return 'System';
+        case 'system_backend': return 'System';
+        case 'system': return 'System';
+        default: return 'System';
+    }
+}
+
+/**
+ * Toggle message group visibility
+ */
+function toggleMessageGroup(groupId) {
+    const groupElement = document.querySelector(`[data-group-id="${groupId}"]`);
+    if (!groupElement) return;
+    
+    const groupContent = groupElement.querySelector('.message-group-content');
+    const groupToggle = groupElement.querySelector('.group-toggle');
+    
+    if (groupContent.style.display === 'none') {
+        groupContent.style.display = 'block';
+        groupToggle.textContent = '▼';
+        groupElement.classList.remove('collapsed');
+    } else {
+        groupContent.style.display = 'none';
+        groupToggle.textContent = '▶';
+        groupElement.classList.add('collapsed');
+    }
+}
+
+/**
+ * Handle user feedback messages from backend
+ */
+function handleUserFeedback(message) {
+    console.log('📢 User feedback received:', message);
+    
+    const feedbackType = message.feedback_type;
+    const operation = message.operation;
+    const feedbackMessage = message.message;
+    
+    // Map feedback types to message types for UI
+    let messageType = 'info';
+    let messageOptions = {};
+    
+    switch (feedbackType) {
+        case 'tool_start':
+            messageType = 'tool_start';
+            messageOptions = { 
+                persistent: false,  // Start messages can be temporary
+                timeout: 5000,      // Shorter timeout for start messages
+                dismissible: true 
+            };
+            break;
+        case 'tool_success':
+            messageType = 'success';
+            messageOptions = { 
+                persistent: true,   // Success messages stay visible
+                dismissible: true 
+            };
+            break;
+        case 'tool_error':
+            messageType = 'error';
+            messageOptions = { 
+                persistent: true,   // Error messages stay visible
+                dismissible: true 
+            };
+            break;
+        case 'tool_progress':
+            messageType = 'tool_progress';
+            messageOptions = { 
+                persistent: false,
+                timeout: 7000,      // Progress messages have medium timeout
+                dismissible: true 
+            };
+            break;
+        case 'system_info':
+            messageType = 'info';
+            messageOptions = { 
+                persistent: false,
+                timeout: 8000,
+                dismissible: true 
+            };
+            break;
+    }
+    
+    // Add grouping options if provided
+    if (message.group_id) {
+        messageOptions.groupId = message.group_id;
+        messageOptions.startGroup = message.start_group || false;
+        messageOptions.endGroup = message.end_group || false;
+        messageOptions.source = 'system_backend';
+    }
+    
+    // Display the feedback message to the user with appropriate persistence
+    addMessage(feedbackMessage, messageType, messageOptions);
+    
+    // Log additional details for debugging
+    if (message.details && Object.keys(message.details).length > 0) {
+        console.log(`📊 ${operation} details:`, message.details);
     }
 }
 
 /**
  * Execute canvas command from backend
  */
-function executeCanvasCommand(command, data) {
-    console.log(`🎨 Executing canvas command: ${command}`, data);
+function executeCanvasCommand(command, data, commandId = null) {
+    console.log(`🎨 [v1.2] Executing canvas command: "${command}" (type: ${typeof command})`, data);
+    console.log(`🔍 [v1.2] Command length: ${command.length}, Command charCodes:`, Array.from(command).map(c => c.charCodeAt(0)));
+    console.log(`🔍 [v1.2] Available cases: create_container, delete_container, modify_container, move_container, resize_container, clear_canvas, edit_canvas_size, take_screenshot`);
+    
+    // Test exact match
+    if (command === 'move_container') {
+        console.log('✅ Direct comparison with move_container: TRUE');
+    } else {
+        console.log('❌ Direct comparison with move_container: FALSE');
+    }
     
     switch (command) {
         case 'create_container':
             createContainer(data.container_id, data.x, data.y, data.width, data.height);
+            // TODO: Add acknowledgment for container creation
             break;
             
         case 'delete_container':
             deleteContainer(data.container_id);
+            // TODO: Add acknowledgment for container deletion
             break;
             
         case 'modify_container':
             modifyContainer(data.container_id, data.x, data.y, data.width, data.height);
+            // TODO: Add acknowledgment for container modification
+            break;
+            
+        case 'move_container':
+            console.log('🎯 [v1.2] MATCHED move_container case!');
+            moveContainer(data.container_id, data.x, data.y, commandId);
+            break;
+            
+        case 'resize_container':
+            resizeContainer(data.container_id, data.width, data.height, commandId);
             break;
             
         case 'clear_canvas':
             clearCanvas();
+            // TODO: Add acknowledgment for canvas clearing
             break;
             
         case 'edit_canvas_size':
-            resizeCanvas(data.width, data.height);
+            resizeCanvas(data.width, data.height, commandId);
             break;
             
         case 'take_screenshot':
             takeScreenshot(data.filename);
+            // TODO: Add acknowledgment for screenshot
             break;
             
         default:
             console.warn('⚠️ Unknown canvas command:', command);
+            // Send error acknowledgment for unknown commands
+            if (isConnected) {
+                sendWebSocketMessage({
+                    type: 'canvas_command_ack',
+                    command: command,
+                    status: 'error',
+                    data: {
+                        command_id: commandId,
+                        error: `Unknown canvas command: ${command}`,
+                        timestamp: new Date().toISOString()
+                    },
+                    message: `Unknown canvas command: ${command}`
+                });
+            }
     }
 }
 
@@ -252,7 +420,10 @@ function updateConnectionStatus(connected) {
 function sendChatMessage(message) {
     if (!message.trim()) return;
     
-    addMessage(`You: ${message}`, 'info');
+    addMessage(`${message}`, 'info', { 
+        source: 'user',
+        persistent: true 
+    });
     
     if (isConnected) {
         sendWebSocketMessage({
@@ -261,7 +432,9 @@ function sendChatMessage(message) {
             conversation_id: 'v0.1_session'
         });
     } else {
-        addMessage('Not connected to backend. Please check connection.', 'error');
+        addMessage('Not connected to backend. Please check connection.', 'error', { 
+            source: 'system_frontend' 
+        });
     }
 }
 
@@ -341,11 +514,33 @@ function updateStateDisplay() {
 }
 
 /**
- * Add a message to the chat area
+ * Add a message to the chat area with persistence control
+ * @param {string} message - The message text
+ * @param {string} type - Message type: 'info', 'success', 'error', 'warning'
+ * @param {object} options - Options for message behavior
+ * @param {boolean} options.persistent - If true, message won't auto-remove
+ * @param {number} options.timeout - Custom timeout in milliseconds (default: 10000)
+ * @param {boolean} options.dismissible - If true, adds a close button
+ * @param {string} options.source - Message source: 'user', 'assistant', 'system_frontend', 'system_backend'
+ * @param {string} options.groupId - Optional group ID for grouping related messages
+ * @param {boolean} options.startGroup - If true, starts a new message group
+ * @param {boolean} options.endGroup - If true, ends the current message group
  */
-function addMessage(message, type = 'info') {
+function addMessage(message, type = 'info', options = {}) {
     const chatMessages = document.getElementById('chatMessages');
     if (!chatMessages) return;
+
+    // Default options
+    const opts = {
+        persistent: false,
+        timeout: 10000,
+        dismissible: true,
+        source: 'system_frontend',
+        groupId: null,
+        startGroup: false,
+        endGroup: false,
+        ...options
+    };
 
     // Remove welcome message if it exists and this is the first real message
     const welcomeMessage = chatMessages.querySelector('.welcome-message');
@@ -353,26 +548,127 @@ function addMessage(message, type = 'info') {
         welcomeMessage.remove();
     }
 
+    // Handle message grouping
+    let groupElement = null;
+    
+    // Auto-group system messages (both frontend and backend)
+    if (opts.source === 'system_frontend' || opts.source === 'system_backend' || opts.source === 'system') {
+        // Use a unified system group ID, or create one if groupId is provided
+        const systemGroupId = opts.groupId || 'system_messages';
+        groupElement = chatMessages.querySelector(`[data-group-id="${systemGroupId}"]`);
+        
+        if (!groupElement) {
+            // Create new system group
+            groupElement = document.createElement('div');
+            groupElement.className = 'message-group';
+            groupElement.setAttribute('data-group-id', systemGroupId);
+            
+            // Create group header
+            const groupHeader = document.createElement('div');
+            groupHeader.className = 'message-group-header';
+            groupHeader.innerHTML = `
+                <span class="group-source-badge system">System</span>
+                <span class="group-toggle" onclick="toggleMessageGroup('${systemGroupId}')">▼</span>
+            `;
+            
+            // Create group content
+            const groupContent = document.createElement('div');
+            groupContent.className = 'message-group-content';
+            
+            groupElement.appendChild(groupHeader);
+            groupElement.appendChild(groupContent);
+            chatMessages.appendChild(groupElement);
+        }
+        
+        // Update opts to use the unified group
+        opts.groupId = systemGroupId;
+    } else if (opts.groupId) {
+        // Handle non-system groups (for other future use cases)
+        groupElement = chatMessages.querySelector(`[data-group-id="${opts.groupId}"]`);
+        
+        if (!groupElement && opts.startGroup) {
+            // Create new group
+            groupElement = document.createElement('div');
+            groupElement.className = 'message-group';
+            groupElement.setAttribute('data-group-id', opts.groupId);
+            
+            // Create group header
+            const groupHeader = document.createElement('div');
+            groupHeader.className = 'message-group-header';
+            groupHeader.innerHTML = `
+                <span class="group-source-badge ${opts.source}">${getSourceDisplayName(opts.source)}</span>
+                <span class="group-toggle" onclick="toggleMessageGroup('${opts.groupId}')">▼</span>
+            `;
+            
+            // Create group content
+            const groupContent = document.createElement('div');
+            groupContent.className = 'message-group-content';
+            
+            groupElement.appendChild(groupHeader);
+            groupElement.appendChild(groupContent);
+            chatMessages.appendChild(groupElement);
+        }
+    }
+
     const messageElement = document.createElement('div');
     messageElement.className = `message ${type}`;
+    
+    // Add source class
+    messageElement.classList.add(`source-${opts.source}`);
+    
+    // Add persistent class if needed
+    if (opts.persistent) {
+        messageElement.classList.add('persistent');
+    }
+    
+    // Get appropriate icon
+    let icon = 'ℹ️';
+    switch (type) {
+        case 'success': icon = '✅'; break;
+        case 'error': icon = '❌'; break;
+        case 'warning': icon = '⚠️'; break;
+        case 'tool_start': icon = '⚙️'; break;
+        case 'tool_progress': icon = '🔄'; break;
+        default: icon = 'ℹ️';
+    }
+    
+    // Get source badge
+    const sourceBadge = opts.groupId ? '' : `<span class="source-badge ${opts.source}">${getSourceDisplayName(opts.source)}</span>`;
+    
     messageElement.innerHTML = `
         <div class="message-content">
-            <span class="message-icon">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+            <span class="message-icon">${icon}</span>
+            ${sourceBadge}
             <span class="message-text">${message}</span>
+            ${opts.dismissible ? '<button class="message-close" onclick="this.parentElement.parentElement.remove()">×</button>' : ''}
         </div>
     `;
     
-    chatMessages.appendChild(messageElement);
+    // Append to group or chat messages
+    if (groupElement) {
+        const groupContent = groupElement.querySelector('.message-group-content');
+        groupContent.appendChild(messageElement);
+    } else {
+        chatMessages.appendChild(messageElement);
+    }
+    
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    // Auto-remove after 10 seconds for non-chat messages
-    if (!message.startsWith('You:') && !message.startsWith('Assistant:')) {
+    // Auto-remove logic with enhanced control
+    const shouldAutoRemove = !opts.persistent && 
+                            !message.startsWith('You:') && 
+                            !message.startsWith('Assistant:') &&
+                            !message.startsWith('The canvas size has been successfully');  // Keep LLM responses
+
+    if (shouldAutoRemove) {
         setTimeout(() => {
             if (messageElement.parentElement) {
                 messageElement.remove();
             }
-        }, 10000);
+        }, opts.timeout);
     }
+    
+    return messageElement;
 }
 
 // ===== Canvas API (same as test frontend) =====
@@ -500,6 +796,242 @@ function modifyContainer(id, x, y, width, height) {
 }
 
 /**
+ * Move a container to a new position
+ */
+function moveContainer(id, x, y, commandId = null) {
+    const container = window.canvasState.containers.get(id);
+    if (!container) {
+        console.warn(`Container ${id} not found`);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'move_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: `Container ${id} not found`,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Container ${id} not found`
+            });
+        }
+        return false;
+    }
+    
+    // Validate bounds using current canvas size and existing container size
+    const canvasWidth = window.canvasState.canvasSize.width;
+    const canvasHeight = window.canvasState.canvasSize.height;
+    const width = container.width;
+    const height = container.height;
+    
+    if (x < 0 || y < 0 || x + width > canvasWidth || y + height > canvasHeight) {
+        console.warn(`Container bounds exceed canvas size (${canvasWidth}x${canvasHeight})`);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'move_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: `Container bounds exceed canvas size (${canvasWidth}x${canvasHeight})`,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Container bounds exceed canvas size`
+            });
+        }
+        return false;
+    }
+    
+    try {
+        // Store old position for acknowledgment
+        const oldX = container.x;
+        const oldY = container.y;
+        
+        // Update container position
+        container.element.style.left = x + 'px';
+        container.element.style.top = y + 'px';
+        
+        // Update stored data
+        container.x = x;
+        container.y = y;
+        
+        updateStateDisplay();
+        console.log(`✅ Container ${id} moved from (${oldX}, ${oldY}) to (${x}, ${y})`);
+        
+        // Send success acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'move_container',
+                status: 'success',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    old_x: oldX,
+                    old_y: oldY,
+                    new_x: x,
+                    new_y: y,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Container ${id} successfully moved to (${x}, ${y})`
+            });
+        }
+        
+        return true;
+    } catch (error) {
+        console.error(`❌ Failed to move container ${id}:`, error);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'move_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Failed to move container: ${error.message}`
+            });
+        }
+        return false;
+    }
+}
+
+/**
+ * Resize a container
+ */
+function resizeContainer(id, width, height, commandId = null) {
+    const container = window.canvasState.containers.get(id);
+    if (!container) {
+        console.warn(`Container ${id} not found`);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'resize_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: `Container ${id} not found`,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Container ${id} not found`
+            });
+        }
+        return false;
+    }
+    
+    // Validate bounds using current canvas size and container position
+    const canvasWidth = window.canvasState.canvasSize.width;
+    const canvasHeight = window.canvasState.canvasSize.height;
+    const x = container.x;
+    const y = container.y;
+    
+    if (width <= 0 || height <= 0) {
+        console.warn(`Invalid container dimensions: ${width}x${height}`);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'resize_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: `Invalid container dimensions: ${width}x${height}`,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Invalid container dimensions`
+            });
+        }
+        return false;
+    }
+    
+    if (x + width > canvasWidth || y + height > canvasHeight) {
+        console.warn(`Container bounds exceed canvas size (${canvasWidth}x${canvasHeight})`);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'resize_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: `Container bounds exceed canvas size (${canvasWidth}x${canvasHeight})`,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Container bounds exceed canvas size`
+            });
+        }
+        return false;
+    }
+    
+    try {
+        // Store old dimensions for acknowledgment
+        const oldWidth = container.width;
+        const oldHeight = container.height;
+        
+        // Update container size
+        container.element.style.width = width + 'px';
+        container.element.style.height = height + 'px';
+        
+        // Update stored data
+        container.width = width;
+        container.height = height;
+        
+        updateStateDisplay();
+        console.log(`✅ Container ${id} resized from ${oldWidth}x${oldHeight} to ${width}x${height}`);
+        
+        // Send success acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'resize_container',
+                status: 'success',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    old_width: oldWidth,
+                    old_height: oldHeight,
+                    new_width: width,
+                    new_height: height,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Container ${id} successfully resized to ${width}x${height}`
+            });
+        }
+        
+        return true;
+    } catch (error) {
+        console.error(`❌ Failed to resize container ${id}:`, error);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'resize_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Failed to resize container: ${error.message}`
+            });
+        }
+        return false;
+    }
+}
+
+/**
  * Clear all containers from canvas
  */
 function clearCanvas() {
@@ -515,22 +1047,97 @@ function clearCanvas() {
 /**
  * Resize the canvas
  */
-function resizeCanvas(width, height) {
+function resizeCanvas(width, height, commandId = null) {
     if (window.canvasState.canvas) {
-        // Update canvas element dimensions
-        window.canvasState.canvas.style.width = width + 'px';
-        window.canvasState.canvas.style.height = height + 'px';
-        
-        // Update internal state
-        window.canvasState.canvasSize = { width, height };
-        
-        // Update state display to show new canvas size
-        updateStateDisplay();
-        
-        console.log(`Canvas resized to ${width}x${height}`);
-        addMessage(`Canvas resized to ${width}x${height} pixels`, 'success');
-        return true;
+        try {
+            // Store old dimensions for verification
+            const oldWidth = window.canvasState.canvasSize.width;
+            const oldHeight = window.canvasState.canvasSize.height;
+            
+            // Update canvas element dimensions
+            window.canvasState.canvas.style.width = width + 'px';
+            window.canvasState.canvas.style.height = height + 'px';
+            
+            // Update internal state
+            window.canvasState.canvasSize = { width, height };
+            
+            // Update state display to show new canvas size
+            updateStateDisplay();
+            
+            console.log(`✅ Canvas resized successfully from ${oldWidth}x${oldHeight} to ${width}x${height}`);
+            addMessage(`Canvas resized to ${width}x${height} pixels`, 'success', { 
+                persistent: true,  // Canvas operations should be persistent
+                dismissible: true,
+                source: 'system_frontend'
+            });
+            
+            // Send acknowledgment back to backend
+            if (isConnected) {
+                sendWebSocketMessage({
+                    type: 'canvas_command_ack',
+                    command: 'edit_canvas_size',
+                    status: 'success',
+                    data: {
+                        requested_width: width,
+                        requested_height: height,
+                        actual_width: window.canvasState.canvasSize.width,
+                        actual_height: window.canvasState.canvasSize.height,
+                        old_width: oldWidth,
+                        old_height: oldHeight,
+                        command_id: commandId,
+                        timestamp: new Date().toISOString()
+                    },
+                    message: `Canvas successfully resized to ${width}x${height}`
+                });
+                console.log('📤 Canvas resize acknowledgment sent to backend');
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('❌ Failed to resize canvas:', error);
+            addMessage(`Failed to resize canvas: ${error.message}`, 'error');
+            
+            // Send failure acknowledgment
+            if (isConnected) {
+                sendWebSocketMessage({
+                    type: 'canvas_command_ack',
+                    command: 'edit_canvas_size',
+                    status: 'error',
+                    data: {
+                        requested_width: width,
+                        requested_height: height,
+                        command_id: commandId,
+                        error: error.message,
+                        timestamp: new Date().toISOString()
+                    },
+                    message: `Failed to resize canvas: ${error.message}`
+                });
+            }
+            
+            return false;
+        }
     }
+    
+    console.error('❌ Canvas element not found');
+    addMessage('Canvas element not found', 'error');
+    
+    // Send failure acknowledgment
+    if (isConnected) {
+        sendWebSocketMessage({
+            type: 'canvas_command_ack',
+            command: 'edit_canvas_size',
+            status: 'error',
+            data: {
+                requested_width: width,
+                requested_height: height,
+                command_id: commandId,
+                error: 'Canvas element not found',
+                timestamp: new Date().toISOString()
+            },
+            message: 'Canvas element not found'
+        });
+    }
+    
     return false;
 }
 
@@ -635,6 +1242,33 @@ function runDemo() {
 // ===== Global API =====
 
 // Expose API for console access
+/**
+ * Clear temporary messages (non-persistent ones)
+ */
+function clearTemporaryMessages() {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+    
+    const messages = chatMessages.querySelectorAll('.message:not(.persistent)');
+    messages.forEach(message => {
+        if (!message.querySelector('.message-text').textContent.startsWith('You:') &&
+            !message.querySelector('.message-text').textContent.startsWith('Assistant:')) {
+            message.remove();
+        }
+    });
+}
+
+/**
+ * Clear all messages
+ */
+function clearAllMessages() {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+    
+    const messages = chatMessages.querySelectorAll('.message');
+    messages.forEach(message => message.remove());
+}
+
 window.canvasAPI = {
     getState,
     createContainer,
@@ -643,7 +1277,11 @@ window.canvasAPI = {
     clearCanvas,
     resizeCanvas,
     takeScreenshot,
-    sendChatMessage
+    sendChatMessage,
+    // Message utilities
+    clearTemporaryMessages,
+    clearAllMessages,
+    addMessage  // Allow manual message creation
 };
 
 // Expose test functions

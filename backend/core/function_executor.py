@@ -1,21 +1,28 @@
 """
-Function Executor for Canvas Operations
+Function Executor for Core Architecture
 
-Bridges LLM function calls to canvas controller operations.
-Based on the proven implementation from tests/python/llm_canvas_chatbot.py.
+Bridges LLM function calls to the modular architecture.
+Currently supports only canvas size operations as the first implementation.
 """
 
 import json
-import math
+import logging
+import os
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from core.canvas_bridge import canvas_bridge
+from .registry import execute_canvas_management_tool
+from .utilities import (
+    log_component_entry,
+    log_component_exit,
+    log_handover,
+    user_feedback_manager
+)
 
 
-class CanvasFunctionExecutor:
+class coreFunctionExecutor:
     """
-    Function executor that bridges LLM function calls to canvas operations
+    Function executor that bridges LLM function calls to core  operations
     """
     
     def __init__(self, chatbot_instance=None):
@@ -26,286 +33,26 @@ class CanvasFunctionExecutor:
             chatbot_instance: Reference to chatbot for accessing settings
         """
         self.chatbot = chatbot_instance
-        self.canvas_bridge = canvas_bridge
+        self.debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+        self.logger = logging.getLogger(__name__)
         
-        # Default settings
-        self.auto_adjust_enabled = True
-        self.overlap_prevention_enabled = False
-    
-    def _get_all_used_identifiers(self):
-        """
-        Get all currently used identifiers across all elements on the canvas
+        # Available functions in core  (currently only canvas management operations)
+        self.available_functions = [
+            "set_canvas_dimensions",
+            "get_canvas_dimensions",
+            "create_container",
+            "resize_container",
+            "move_container",
+            "delete_container",
+            "clear_canvas"
+        ]
         
-        Returns:
-            Dict with categorized identifiers and summary
-        """
-        try:
-            # Get container identifiers
-            current_state = self.canvas_bridge.get_canvas_state()
-            container_ids = [c['id'] for c in current_state.get('containers', [])]
-            
-            # For now, we only track container IDs
-            # Chart IDs would be tracked here if we implement pie charts
-            chart_ids = []
-            
-            # Combine all identifiers
-            all_ids = container_ids + chart_ids
-            
-            return {
-                "container_ids": container_ids,
-                "chart_ids": chart_ids,
-                "all_identifiers": all_ids,
-                "total_count": len(all_ids),
-                "summary": f"Found {len(container_ids)} container(s) and {len(chart_ids)} chart(s) - Total: {len(all_ids)} identifier(s)"
-            }
-            
-        except Exception as e:
-            print(f"[WARNING] Warning: Error getting used identifiers: {e}")
-            return {
-                "container_ids": [],
-                "chart_ids": [],
-                "all_identifiers": [],
-                "total_count": 0,
-                "summary": "Error retrieving identifiers"
-            }
-    
-    def _validate_identifier_uniqueness(self, proposed_id, element_type="element"):
-        """
-        Validate that a proposed identifier is unique across all canvas elements
-        
-        Args:
-            proposed_id: The identifier to validate
-            element_type: Type of element (for error messages)
-            
-        Returns:
-            Dict with validation result and suggestions
-        """
-        if not proposed_id or not isinstance(proposed_id, str):
-            return {
-                "is_valid": False,
-                "error": f"Invalid {element_type} identifier: must be a non-empty string",
-                "proposed_id": proposed_id,
-                "suggestions": ["Use alphanumeric characters and underscores", "Example: 'chart_1', 'container_main', 'sales_data'"]
-            }
-        
-        # Clean the identifier (remove special characters, convert to lowercase)
-        clean_id = proposed_id.strip().replace(' ', '_').lower()
-        
-        # Get all used identifiers
-        used_identifiers = self._get_all_used_identifiers()
-        all_used_ids = used_identifiers["all_identifiers"]
-        
-        # Check for exact match
-        if clean_id in all_used_ids:
-            return {
-                "is_valid": False,
-                "error": f"{element_type.capitalize()} identifier '{clean_id}' is already in use",
-                "proposed_id": proposed_id,
-                "clean_id": clean_id,
-                "conflicting_with": clean_id,
-                "used_identifiers": used_identifiers,
-                "suggestions": self._generate_alternative_identifiers(clean_id, all_used_ids)
-            }
-        
-        # Check for similar identifiers (potential confusion)
-        similar_ids = [uid for uid in all_used_ids if uid.startswith(clean_id) or clean_id.startswith(uid)]
-        
-        if similar_ids:
-            return {
-                "is_valid": True,  # Valid but with warning
-                "warning": f"Identifier '{clean_id}' is similar to existing: {', '.join(similar_ids)}",
-                "proposed_id": proposed_id,
-                "clean_id": clean_id,
-                "similar_identifiers": similar_ids,
-                "used_identifiers": used_identifiers
-            }
-        
-        # Identifier is unique
-        return {
-            "is_valid": True,
-            "proposed_id": proposed_id,
-            "clean_id": clean_id,
-            "message": f"Identifier '{clean_id}' is available",
-            "used_identifiers": used_identifiers
-        }
-    
-    def _generate_alternative_identifiers(self, base_id, used_ids, max_suggestions=5):
-        """
-        Generate alternative identifier suggestions when there's a conflict
-        
-        Args:
-            base_id: The conflicting base identifier
-            used_ids: List of already used identifiers
-            max_suggestions: Maximum number of suggestions to generate
-            
-        Returns:
-            List of alternative identifier suggestions
-        """
-        suggestions = []
-        
-        # Try numbered variations
-        for i in range(1, max_suggestions + 1):
-            candidate = f"{base_id}_{i}"
-            if candidate not in used_ids:
-                suggestions.append(candidate)
-        
-        # Try common suffixes if we need more suggestions
-        suffixes = ["new", "alt", "v2", "main", "primary"]
-        for suffix in suffixes:
-            if len(suggestions) >= max_suggestions:
-                break
-            candidate = f"{base_id}_{suffix}"
-            if candidate not in used_ids:
-                suggestions.append(candidate)
-        
-        # Try prefixes if still need more
-        prefixes = ["new", "my", "temp", "draft"]
-        for prefix in prefixes:
-            if len(suggestions) >= max_suggestions:
-                break
-            candidate = f"{prefix}_{base_id}"
-            if candidate not in used_ids:
-                suggestions.append(candidate)
-        
-        return suggestions[:max_suggestions]
-    
-    def _get_all_containers_for_optimization(self, new_container_id=None, exclude_container_id=None):
-        """
-        Get all containers (existing + new) for optimization calculation
-        
-        Args:
-            new_container_id: ID of new container to include
-            exclude_container_id: ID of container to exclude (for deletion)
-            
-        Returns:
-            List of container specifications for optimization
-        """
-        # Get current canvas state
-        current_state = self.canvas_bridge.get_canvas_state()
-        existing_containers = current_state.get('containers', [])
-        
-        containers_for_optimization = []
-        
-        # Add existing containers (except excluded ones)
-        for container in existing_containers:
-            if exclude_container_id and container['id'] == exclude_container_id:
-                continue  # Skip container being deleted
-                
-            containers_for_optimization.append({
-                "id": container['id'],
-                "status": "existing",
-                "current_x": container['x'],
-                "current_y": container['y'],
-                "current_width": container['width'],
-                "current_height": container['height']
-            })
-        
-        # Add new container if specified
-        if new_container_id:
-            containers_for_optimization.append({
-                "id": new_container_id,
-                "status": "new"
-            })
-        
-        return containers_for_optimization
-    
-    async def _apply_optimized_layout(self, optimization_result, target_container_id=None):
-        """
-        Apply the optimized layout to all containers
-        
-        Args:
-            optimization_result: Result from canvas_bridge.calculate_optimal_layout
-            target_container_id: If specified, only return info for this container
-            
-        Returns:
-            Dict with operation results and optimization info
-        """
-        if not optimization_result or 'containers' not in optimization_result:
-            return {
-                "success": False,
-                "error": "Invalid optimization result",
-                "optimization_used": False
-            }
-        
-        optimized_containers = optimization_result['containers']
-        results = []
-        target_result = None
-        
-        for opt_container in optimized_containers:
-            container_id = opt_container['id']
-            
-            # Apply the optimized dimensions
-            if opt_container['status'] == 'existing':
-                # Modify existing container
-                success = await self.canvas_bridge.modify_container(
-                    container_id=container_id,
-                    x=opt_container['recommended_x'],
-                    y=opt_container['recommended_y'],
-                    width=opt_container['recommended_width'],
-                    height=opt_container['recommended_height'],
-                    auto_adjust=self.auto_adjust_enabled,
-                    avoid_overlap=self.overlap_prevention_enabled
-                )
-            else:
-                # Create new container
-                success = await self.canvas_bridge.create_container(
-                    container_id=container_id,
-                    x=opt_container['recommended_x'],
-                    y=opt_container['recommended_y'],
-                    width=opt_container['recommended_width'],
-                    height=opt_container['recommended_height'],
-                    auto_adjust=self.auto_adjust_enabled,
-                    avoid_overlap=self.overlap_prevention_enabled
-                )
-            
-            container_result = {
-                "container_id": container_id,
-                "success": success,  # Use actual result from canvas operation
-                "status": opt_container['status'],
-                "optimized_position": (opt_container['recommended_x'], opt_container['recommended_y']),
-                "optimized_size": (opt_container['recommended_width'], opt_container['recommended_height']),
-                "grid_position": opt_container.get('grid_position', {})
-            }
-            
-            # Add change information for existing containers
-            if opt_container['status'] == 'existing':
-                container_result["previous_position"] = (opt_container.get('current_x'), opt_container.get('current_y'))
-                container_result["previous_size"] = (opt_container.get('current_width'), opt_container.get('current_height'))
-            
-            results.append(container_result)
-            
-            # Track target container result
-            if target_container_id and container_id == target_container_id:
-                target_result = container_result
-        
-        # Check if all operations were successful
-        all_successful = all(result["success"] for result in results)
-        failed_operations = [result for result in results if not result["success"]]
-        
-        # Determine overall success
-        overall_success = all_successful
-        error_message = None
-        
-        if not all_successful:
-            failed_ids = [result["container_id"] for result in failed_operations]
-            error_message = f"Failed to apply layout to containers: {', '.join(failed_ids)}"
-        
-        return {
-            "success": overall_success,
-            "error": error_message,
-            "optimization_used": True,
-            "optimization_result": optimization_result,
-            "container_results": results,
-            "target_container": target_result,
-            "metrics": optimization_result.get('metrics', {}),
-            "layout_summary": optimization_result.get('summary', ''),
-            "recommendations": optimization_result.get('recommendations', []),
-            "failed_operations": failed_operations if failed_operations else []
-        }
+        if self.debug_mode:
+            self.logger.info(f"[FUNCTION_EXECUTOR] Initialized with functions: {self.available_functions}")
     
     async def execute_function_call(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute a function call on the canvas bridge
+        Execute a function call using the core  architecture
         
         Args:
             function_name: Name of function to execute
@@ -314,608 +61,68 @@ class CanvasFunctionExecutor:
         Returns:
             Function execution result
         """
-        print(f"[CONFIG] EXECUTING: {function_name}({arguments})")
+        print(f"[CORE ] EXECUTING: {function_name}({arguments})")
+        
+        if self.debug_mode:
+            self.logger.debug(f"[FUNCTION_EXECUTOR] 🎯 Received function call: {function_name}")
+            self.logger.debug(f"[FUNCTION_EXECUTOR] 📋 Arguments: {arguments}")
+        
+        log_component_entry("FUNCTION_EXECUTOR", "execute_function_call", f"{function_name}({arguments})")
+        
+        # Send user feedback: tool execution started
+        await user_feedback_manager.notify_tool_start(function_name, arguments)
         
         try:
-            if function_name == "create_container":
-                try:
-                    container_id = arguments["container_id"]
-                    
-                    # GUARDRAIL: Validate identifier uniqueness across all elements
-                    validation_result = self._validate_identifier_uniqueness(container_id, "container")
-                    
-                    if not validation_result["is_valid"]:
-                        used_info = validation_result["used_identifiers"]
-                        error_msg = f"[ERROR] {validation_result['error']}\n"
-                        error_msg += f"📋 Currently used identifiers:\n"
-                        error_msg += f"   🗂️ Containers: {', '.join(used_info['container_ids']) if used_info['container_ids'] else 'None'}\n"
-                        error_msg += f"   [CHART] Charts: {', '.join(used_info['chart_ids']) if used_info['chart_ids'] else 'None'}\n"
-                        error_msg += f"[INFO] Suggested alternatives: {', '.join(validation_result['suggestions'])}"
-                        
-                        return {
-                            "status": "error",
-                            "result": error_msg,
-                            "validation_details": validation_result,
-                            "function_name": function_name
-                        }
-                    
-                    # Use the cleaned identifier
-                    clean_container_id = validation_result["clean_id"]
-                    
-                    # Get canvas size for optimization
-                    canvas_size = self.canvas_bridge.get_canvas_size()
-                    
-                    # Get all containers for optimization (existing + new)
-                    containers_for_optimization = self._get_all_containers_for_optimization(
-                        new_container_id=clean_container_id
-                    )
-                    
-                    # Calculate optimal layout
-                    optimization_result = self.canvas_bridge.calculate_optimal_layout(
-                        containers_for_optimization, 
-                        canvas_size['width'], 
-                        canvas_size['height']
-                    )
-                    
-                    # Apply optimized layout
-                    layout_application = await self._apply_optimized_layout(
-                        optimization_result, 
-                        target_container_id=clean_container_id
-                    )
-                    
-                    if layout_application["success"] and layout_application["target_container"]["success"]:
-                        target_info = layout_application["target_container"]
-                        metrics = layout_application["metrics"]
-                        
-                        # Add identifier validation info if ID was cleaned
-                        id_info = f"'{clean_container_id}'"
-                        if clean_container_id != container_id:
-                            id_info += f" (cleaned from '{container_id}')"
-                        
-                        result_msg = f"[SUCCESS] Container {id_info} created successfully using optimized layout:\n"
-                        result_msg += f"   📍 Position: {target_info['optimized_position']}\n"
-                        result_msg += f"   📏 Size: {target_info['optimized_size']}\n"
-                        result_msg += f"   [TARGET] Grid position: Row {target_info['grid_position']['row']}, Col {target_info['grid_position']['col']}\n"
-                        result_msg += f"   [CHART] Space utilization: {metrics['space_utilization_percent']}%\n"
-                        result_msg += f"   [CONFIG] Layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
-                        result_msg += f"   [INFO] Optimization: {layout_application['layout_summary']}"
-                        
-                        # Add information about other containers that were repositioned
-                        repositioned_containers = [r for r in layout_application["container_results"] 
-                                                 if r["container_id"] != clean_container_id and r["status"] == "existing"]
-                        if repositioned_containers:
-                            result_msg += f"\n   🔄 Repositioned {len(repositioned_containers)} existing container(s) for optimal layout"
-                        
-                        # Add identifier validation warning if applicable
-                        if validation_result.get("warning"):
-                            result_msg += f"\n   [WARNING] {validation_result['warning']}"
-                        
-                        return {
-                            "status": "success",
-                            "result": result_msg,
-                            "optimization_used": True,
-                            "optimization_details": layout_application,
-                            "function_name": function_name
-                        }
-                    else:
-                        error_msg = layout_application.get("error", "Unknown optimization error")
-                        return {
-                            "status": "error",
-                            "result": f"Failed to create container '{clean_container_id}' with optimization: {error_msg}",
-                            "function_name": function_name
-                        }
-                        
-                except Exception as e:
-                    return {
-                        "status": "error",
-                        "result": f"Error creating container '{arguments.get('container_id', 'unknown')}': {str(e)}",
-                        "function_name": function_name
-                    }
-            
-            elif function_name == "delete_container":
-                try:
-                    container_id = arguments["container_id"]
-                    
-                    # Check if container exists
-                    current_state = self.canvas_bridge.get_canvas_state()
-                    existing_ids = [c['id'] for c in current_state.get('containers', [])]
-                    if container_id not in existing_ids:
-                        if existing_ids:
-                            return {
-                                "status": "error",
-                                "result": f"Failed to delete container '{container_id}'. Container not found. Available containers: {', '.join(existing_ids)}.",
-                                "function_name": function_name
-                            }
-                        else:
-                            return {
-                                "status": "error",
-                                "result": f"Failed to delete container '{container_id}'. No containers exist on canvas.",
-                                "function_name": function_name
-                            }
-                    
-                    # Delete the container
-                    delete_result = await self.canvas_bridge.delete_container(container_id)
-                    
-                    if not delete_result:
-                        return {
-                            "status": "error",
-                            "result": f"Failed to delete container '{container_id}' from canvas.",
-                            "function_name": function_name
-                        }
-                    
-                    # Get remaining containers after deletion
-                    remaining_state = self.canvas_bridge.get_canvas_state()
-                    remaining_containers = remaining_state.get('containers', [])
-                    
-                    if len(remaining_containers) == 0:
-                        # No containers left, just report deletion
-                        return {
-                            "status": "success",
-                            "result": f"[SUCCESS] Container '{container_id}' deleted successfully. Canvas is now empty.",
-                            "optimization_used": False,
-                            "function_name": function_name
-                        }
-                    
-                    # Re-optimize remaining containers
-                    canvas_size = self.canvas_bridge.get_canvas_size()
-                    containers_for_optimization = self._get_all_containers_for_optimization()
-                    
-                    # Calculate optimal layout for remaining containers
-                    optimization_result = self.canvas_bridge.calculate_optimal_layout(
-                        containers_for_optimization, 
-                        canvas_size['width'], 
-                        canvas_size['height']
-                    )
-                    
-                    # Apply optimized layout to remaining containers
-                    layout_application = await self._apply_optimized_layout(optimization_result)
-                    
-                    if layout_application["success"]:
-                        metrics = layout_application["metrics"]
-                        
-                        result_msg = f"[SUCCESS] Container '{container_id}' deleted successfully and remaining containers optimized:\n"
-                        result_msg += f"   🗑️ Deleted: '{container_id}'\n"
-                        result_msg += f"   [CHART] Remaining containers: {len(remaining_containers)}\n"
-                        result_msg += f"   [CHART] Space utilization: {metrics['space_utilization_percent']}%\n"
-                        result_msg += f"   [CONFIG] New layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
-                        result_msg += f"   [INFO] Optimization: {layout_application['layout_summary']}"
-                        
-                        # Add information about repositioned containers
-                        repositioned_containers = layout_application["container_results"]
-                        if repositioned_containers:
-                            result_msg += f"\n   🔄 Repositioned {len(repositioned_containers)} remaining container(s) for optimal layout"
-                        
-                        return {
-                            "status": "success",
-                            "result": result_msg,
-                            "optimization_used": True,
-                            "optimization_details": layout_application,
-                            "function_name": function_name
-                        }
-                    else:
-                        # Deletion succeeded but optimization failed
-                        return {
-                            "status": "success",
-                            "result": f"[SUCCESS] Container '{container_id}' deleted successfully, but failed to optimize remaining containers.",
-                            "optimization_used": False,
-                            "function_name": function_name
-                        }
-                        
-                except Exception as e:
-                    return {
-                        "status": "error",
-                        "result": f"Error deleting container '{arguments.get('container_id', 'unknown')}': {str(e)}",
-                        "function_name": function_name
-                    }
-            
-            elif function_name == "modify_container":
-                try:
-                    container_id = arguments["container_id"]
-                    
-                    # Check if container exists
-                    current_state = self.canvas_bridge.get_canvas_state()
-                    existing_ids = [c['id'] for c in current_state.get('containers', [])]
-                    if container_id not in existing_ids:
-                        if existing_ids:
-                            return {
-                                "status": "error",
-                                "result": f"Failed to modify container '{container_id}'. Container not found. Available containers: {', '.join(existing_ids)}.",
-                                "function_name": function_name
-                            }
-                        else:
-                            return {
-                                "status": "error",
-                                "result": f"Failed to modify container '{container_id}'. No containers exist on canvas.",
-                                "function_name": function_name
-                            }
-                    
-                    # Get canvas size for optimization
-                    canvas_size = self.canvas_bridge.get_canvas_size()
-                    
-                    # Get all containers for optimization (all existing, including the one being modified)
-                    containers_for_optimization = self._get_all_containers_for_optimization()
-                    
-                    # Calculate optimal layout
-                    optimization_result = self.canvas_bridge.calculate_optimal_layout(
-                        containers_for_optimization, 
-                        canvas_size['width'], 
-                        canvas_size['height']
-                    )
-                    
-                    # Apply optimized layout
-                    layout_application = await self._apply_optimized_layout(
-                        optimization_result, 
-                        target_container_id=container_id
-                    )
-                    
-                    if layout_application["success"]:
-                        # Check if target container operation was successful
-                        target_info = layout_application.get("target_container")
-                        if target_info and target_info.get("success"):
-                            metrics = layout_application["metrics"]
-                            
-                            result_msg = f"[SUCCESS] Container '{container_id}' modified successfully using optimized layout:\n"
-                            result_msg += f"   📍 New position: {target_info['optimized_position']}\n"
-                            result_msg += f"   📏 New size: {target_info['optimized_size']}\n"
-                            result_msg += f"   [TARGET] Grid position: Row {target_info['grid_position']['row']}, Col {target_info['grid_position']['col']}\n"
-                            result_msg += f"   [CHART] Space utilization: {metrics['space_utilization_percent']}%\n"
-                            result_msg += f"   [CONFIG] Layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers\n"
-                            result_msg += f"   [INFO] Optimization: {layout_application['layout_summary']}"
-                            
-                            # Show previous vs new dimensions
-                            if target_info.get("previous_position") and target_info.get("previous_size"):
-                                result_msg += f"\n   📋 Previous: {target_info['previous_position']} size {target_info['previous_size']}"
-                            
-                            # Add information about other containers that were repositioned
-                            repositioned_containers = [r for r in layout_application["container_results"] 
-                                                     if r["container_id"] != container_id and r["status"] == "existing"]
-                            if repositioned_containers:
-                                result_msg += f"\n   🔄 Repositioned {len(repositioned_containers)} other container(s) for optimal layout"
-                            
-                            return {
-                                "status": "success",
-                                "result": result_msg,
-                                "optimization_used": True,
-                                "optimization_details": layout_application,
-                                "function_name": function_name
-                            }
-                        else:
-                            # Target container operation failed
-                            error_msg = f"Failed to modify target container '{container_id}'"
-                            if target_info:
-                                error_msg += f" - container operation returned success: {target_info.get('success', 'unknown')}"
-                            else:
-                                error_msg += " - no target container result found"
-                            
-                            return {
-                                "status": "error",
-                                "result": error_msg,
-                                "optimization_details": layout_application,
-                                "function_name": function_name
-                            }
-                    else:
-                        # Overall layout application failed
-                        error_msg = layout_application.get("error", "Layout optimization failed")
-                        failed_ops = layout_application.get("failed_operations", [])
-                        
-                        detailed_error = f"Failed to modify container '{container_id}' with optimization: {error_msg}"
-                        if failed_ops:
-                            failed_ids = [op["container_id"] for op in failed_ops]
-                            detailed_error += f"\nFailed operations on containers: {', '.join(failed_ids)}"
-                        
-                        return {
-                            "status": "error",
-                            "result": detailed_error,
-                            "optimization_details": layout_application,
-                            "function_name": function_name
-                        }
-                        
-                except Exception as e:
-                    return {
-                        "status": "error",
-                        "result": f"Error modifying container '{arguments.get('container_id', 'unknown')}': {str(e)}",
-                        "function_name": function_name
-                    }
-            
-            elif function_name == "get_canvas_state":
-                state = self.canvas_bridge.get_canvas_state()
+            if function_name in self.available_functions:
+                if self.debug_mode:
+                    self.logger.debug(f"[FUNCTION_EXECUTOR] ✅ Function {function_name} is available")
+                    self.logger.debug(f"[FUNCTION_EXECUTOR] 🔄 Handing over to registry: execute_canvas_management_tool")
                 
-                # Format the state information for better LLM understanding
-                containers = state.get('containers', [])
-                if containers:
-                    container_summary = []
-                    for container in containers:
-                        summary = f"'{container['id']}': position ({container['x']}, {container['y']}), size {container['width']}x{container['height']}"
-                        container_summary.append(summary)
-                    
-                    formatted_result = {
-                        "canvas_size": state.get('canvas_size', {'width': 800, 'height': 600}),
-                        "container_count": len(containers),
-                        "containers": containers,
-                        "summary": f"Canvas has {len(containers)} container(s): " + "; ".join(container_summary)
-                    }
+                log_handover("FUNCTION_EXECUTOR", "REGISTRY", function_name, str(arguments))
+                
+                # Execute using the canvas management tool
+                result = await execute_canvas_management_tool(function_name, arguments)
+                
+                if self.debug_mode:
+                    self.logger.debug(f"[FUNCTION_EXECUTOR] 🏁 Registry returned: {result.get('status', 'unknown')}")
+                
+                # Send user feedback based on result
+                if result.get('status') == 'success':
+                    await user_feedback_manager.notify_tool_success(function_name, result)
                 else:
-                    formatted_result = {
-                        "canvas_size": state.get('canvas_size', {'width': 800, 'height': 600}),
-                        "container_count": 0,
-                        "containers": [],
-                        "summary": "Canvas is empty (no containers)"
-                    }
+                    error_msg = result.get('error', 'Unknown error occurred')
+                    await user_feedback_manager.notify_tool_error(function_name, error_msg)
                 
-                return {
-                    "status": "success",
-                    "result": formatted_result,
-                    "function_name": function_name
-                }
-            
-            elif function_name == "clear_canvas":
-                result = await self.canvas_bridge.clear_canvas()
-                return {
-                    "status": "success" if result else "error",
-                    "result": "Canvas cleared successfully" if result else "Failed to clear canvas",
-                    "function_name": function_name
-                }
-            
-            elif function_name == "take_screenshot":
-                filename = arguments.get("filename")
-                screenshot_path = await self.canvas_bridge.take_screenshot(filename)
-                return {
-                    "status": "success" if screenshot_path else "error",
-                    "result": f"Screenshot requested: {screenshot_path}" if screenshot_path else "Failed to take screenshot",
-                    "function_name": function_name
-                }
-            
-            elif function_name == "get_canvas_size":
-                size = self.canvas_bridge.get_canvas_size()
-                return {
-                    "status": "success",
-                    "result": f"Canvas size: {size['width']}x{size['height']} pixels",
-                    "canvas_size": size,
-                    "function_name": function_name
-                }
-            
-            elif function_name == "edit_canvas_size":
-                try:
-                    new_width = arguments['width']
-                    new_height = arguments['height']
-                    
-                    # Input validation
-                    if not isinstance(new_width, int) or not isinstance(new_height, int):
-                        return {
-                            "status": "error",
-                            "result": "Canvas width and height must be integers",
-                            "function_name": function_name
-                        }
-                    
-                    if new_width < 200 or new_height < 200:
-                        return {
-                            "status": "error",
-                            "result": "Canvas size must be at least 200x200 pixels for usability",
-                            "function_name": function_name
-                        }
-                    
-                    if new_width > 5000 or new_height > 5000:
-                        return {
-                            "status": "error",
-                            "result": "Canvas size cannot exceed 5000x5000 pixels for performance reasons",
-                            "function_name": function_name
-                        }
-                    
-                    # Get current state
-                    current_state = self.canvas_bridge.get_canvas_state()
-                    current_size = current_state.get('canvas_size', {'width': 800, 'height': 600})
-                    containers = current_state.get('containers', [])
-                    
-                    # Update canvas size in bridge first
-                    self.canvas_bridge.canvas_state["canvas_size"] = {
-                        "width": new_width,
-                        "height": new_height
-                    }
-                    
-                    # Send canvas resize command to frontend
-                    await self.canvas_bridge.broadcast_to_frontend({
-                        "type": "canvas_command",
-                        "command": "edit_canvas_size",
-                        "data": {
-                            "width": new_width,
-                            "height": new_height
-                        }
-                    })
-                    
-                    # Prepare result message
-                    result_msg = f"[SUCCESS] Canvas resized from {current_size['width']}x{current_size['height']} to {new_width}x{new_height} pixels"
-                    
-                    # If there are containers, optimize their layout for the new canvas size
-                    if containers:
-                        try:
-                            # Get all containers for optimization
-                            containers_for_optimization = self._get_all_containers_for_optimization()
-                            
-                            # Calculate optimal layout for new canvas size
-                            optimization_result = self.canvas_bridge.calculate_optimal_layout(
-                                containers_for_optimization, 
-                                new_width, 
-                                new_height
-                            )
-                            
-                            # Apply optimized layout
-                            layout_application = await self._apply_optimized_layout(optimization_result)
-                            
-                            if layout_application["success"]:
-                                metrics = layout_application["metrics"]
-                                
-                                result_msg += f"\n[CONFIG] **Container Optimization Applied:**"
-                                result_msg += f"\n   [CHART] Optimized {len(containers)} container(s) for new canvas size"
-                                result_msg += f"\n   📏 New layout: {metrics['grid_dimensions']} grid with {metrics['container_size']} containers"
-                                result_msg += f"\n   📈 Space utilization: {metrics['space_utilization_percent']}%"
-                                result_msg += f"\n   [INFO] Layout strategy: {layout_application['layout_summary']}"
-                                
-                                # Show details about container adjustments
-                                repositioned_containers = layout_application["container_results"]
-                                if repositioned_containers:
-                                    result_msg += f"\n   🔄 All containers repositioned and resized for optimal fit"
-                                    
-                                    # Show a few examples of the changes
-                                    for i, container_result in enumerate(repositioned_containers[:3]):
-                                        if container_result.get("previous_position") and container_result.get("previous_size"):
-                                            prev_pos = container_result["previous_position"]
-                                            prev_size = container_result["previous_size"]
-                                            new_pos = container_result["optimized_position"]
-                                            new_size = container_result["optimized_size"]
-                                            
-                                            result_msg += f"\n     • '{container_result['container_id']}': {prev_pos} {prev_size} → {new_pos} {new_size}"
-                                    
-                                    if len(repositioned_containers) > 3:
-                                        result_msg += f"\n     • ... and {len(repositioned_containers) - 3} more containers"
-                                
-                                return {
-                                    "status": "success",
-                                    "result": result_msg,
-                                    "canvas_size": {"width": new_width, "height": new_height},
-                                    "optimization_used": True,
-                                    "optimization_details": layout_application,
-                                    "containers_optimized": len(containers),
-                                    "function_name": function_name
-                                }
-                            else:
-                                # Canvas resized but optimization failed
-                                error_msg = layout_application.get("error", "Unknown optimization error")
-                                failed_ops = layout_application.get("failed_operations", [])
-                                
-                                result_msg += f"\n[WARNING] **Container optimization failed:** {error_msg}"
-                                if failed_ops:
-                                    failed_ids = [op["container_id"] for op in failed_ops]
-                                    result_msg += f"\n   [ERROR] Failed to optimize containers: {', '.join(failed_ids)}"
-                                result_msg += f"\n   [INFO] Containers may need manual adjustment for the new canvas size"
-                                
-                                return {
-                                    "status": "success",
-                                    "result": result_msg,
-                                    "canvas_size": {"width": new_width, "height": new_height},
-                                    "optimization_used": False,
-                                    "optimization_error": error_msg,
-                                    "function_name": function_name
-                                }
-                                
-                        except Exception as optimization_error:
-                            # Canvas resized but optimization crashed
-                            result_msg += f"\n[WARNING] **Container optimization error:** {str(optimization_error)}"
-                            result_msg += f"\n   [INFO] Canvas resized successfully, but containers may need manual adjustment"
-                            
-                            return {
-                                "status": "success",
-                                "result": result_msg,
-                                "canvas_size": {"width": new_width, "height": new_height},
-                                "optimization_used": False,
-                                "optimization_error": str(optimization_error),
-                                "function_name": function_name
-                            }
-                    else:
-                        # No containers to optimize
-                        result_msg += f"\n[NOTE] No containers to optimize"
-                        
-                        return {
-                            "status": "success",
-                            "result": result_msg,
-                            "canvas_size": {"width": new_width, "height": new_height},
-                            "optimization_used": False,
-                            "containers_optimized": 0,
-                            "function_name": function_name
-                        }
-                    
-                except KeyError as e:
-                    return {
-                        "status": "error",
-                        "result": f"Missing required parameter: {str(e)}",
-                        "function_name": function_name
-                    }
-                except Exception as e:
-                    return {
-                        "status": "error",
-                        "result": f"Error resizing canvas: {str(e)}",
-                        "function_name": function_name
-                    }
-            
-            elif function_name == "get_canvas_settings":
-                return {
-                    "status": "success",
-                    "result": {
-                        "auto_adjust": self.auto_adjust_enabled,
-                        "overlap_prevention": self.overlap_prevention_enabled,
-                        "summary": f"Auto-adjust: {'ON' if self.auto_adjust_enabled else 'OFF'}, Overlap prevention: {'ON' if self.overlap_prevention_enabled else 'OFF'}"
-                    },
-                    "function_name": function_name
-                }
-            
-            elif function_name == "check_container_content":
-                try:
-                    container_id = arguments["container_id"]
-                    
-                    # Check if container exists first
-                    state = self.canvas_bridge.get_canvas_state()
-                    if not state or not state.get('containers'):
-                        return {
-                            "status": "error",
-                            "result": f"No containers exist on canvas. Cannot check container '{container_id}'.",
-                            "function_name": function_name
-                        }
-                    
-                    container_exists = any(c['id'] == container_id for c in state['containers'])
-                    if not container_exists:
-                        existing_ids = [c['id'] for c in state['containers']]
-                        return {
-                            "status": "error",
-                            "result": f"Container '{container_id}' not found. Available containers: {', '.join(existing_ids)}",
-                            "function_name": function_name
-                        }
-                    
-                    # For now, just return basic container info
-                    # In the future, this could check for charts or other content
-                    container_data = None
-                    for c in state['containers']:
-                        if c['id'] == container_id:
-                            container_data = c
-                            break
-                    
-                    result_msg = f"Container '{container_id}' content check:\n"
-                    result_msg += f"   📦 Container exists and is empty (basic container)\n"
-                    result_msg += f"   📍 Position: ({container_data['x']}, {container_data['y']})\n"
-                    result_msg += f"   📏 Size: {container_data['width']}x{container_data['height']}"
-                    
-                    return {
-                        "status": "success",
-                        "result": result_msg,
-                        "function_name": function_name
-                    }
-                    
-                except Exception as e:
-                    return {
-                        "status": "error",
-                        "result": f"Error checking container '{arguments.get('container_id', 'unknown')}': {str(e)}",
-                        "function_name": function_name
-                    }
-            
-            # Placeholder for pie chart functionality (not implemented in v0.1)
-            elif function_name == "create_pie_chart":
-                return {
-                    "status": "error",
-                    "result": "Pie chart functionality is not implemented in v0.1. This feature is available in the Python test environment.",
-                    "function_name": function_name
-                }
+                log_component_exit("FUNCTION_EXECUTOR", "execute_function_call", result.get('status', 'unknown'))
+                return result
             
             else:
+                error_msg = f"Function '{function_name}' not available in core architecture"
+                await user_feedback_manager.notify_tool_error(function_name, error_msg)
+                
+                log_component_exit("FUNCTION_EXECUTOR", "execute_function_call", "ERROR", f"Function not available: {function_name}")
                 return {
                     "status": "error",
-                    "error": f"Unknown function: {function_name}",
-                    "available_functions": ["create_container", "delete_container", "modify_container", 
-                                          "get_canvas_state", "clear_canvas", "take_screenshot", 
-                                          "get_canvas_size", "edit_canvas_size", "get_canvas_settings", 
-                                          "check_container_content"]
+                    "error": error_msg,
+                    "available_functions": self.available_functions,
+                    "message": f"The function '{function_name}' is not yet implemented in the architecture. Currently available: {', '.join(self.available_functions)}"
                 }
                 
         except Exception as e:
+            error_msg = f"Error executing {function_name}: {str(e)}"
+            await user_feedback_manager.notify_tool_error(function_name, error_msg)
+            
+            log_component_exit("FUNCTION_EXECUTOR", "execute_function_call", "EXCEPTION", str(e))
             return {
                 "status": "error",
-                "error": f"Error executing {function_name}: {str(e)}",
+                "error": error_msg,
                 "function_name": function_name
-            } 
+            }
+    
+    def get_available_functions(self) -> List[str]:
+        """Get list of available function names"""
+        return self.available_functions.copy()
+    
+    def is_function_available(self, function_name: str) -> bool:
+        """Check if a function is available in core """
+        return function_name in self.available_functions 

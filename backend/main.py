@@ -8,12 +8,29 @@ Based on the proven implementation from tests/python/llm_canvas_chatbot.py.
 import os
 import sys
 import asyncio
+import logging
 from pathlib import Path
 from typing import Dict, Any
 
 # Add the backend directory to Python path
 backend_dir = Path(__file__).parent
 sys.path.insert(0, str(backend_dir))
+
+# Debug mode configuration
+DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
+
+# Configure logging for debug mode
+if DEBUG_MODE:
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler()
+        ]
+    )
+    print("[DEBUG] Debug mode enabled - detailed logging active")
+else:
+    logging.basicConfig(level=logging.INFO)
 
 # FastAPI imports
 try:
@@ -26,23 +43,18 @@ except ImportError:
     print("[ERROR] FastAPI not installed. Install with: pip install fastapi uvicorn websockets")
     sys.exit(1)
 
-# Core imports
+# Core imports - Using core architecture exclusively
 try:
-    from core.chatbot import chatbot
-    from core.canvas_bridge import canvas_bridge
+    from core.chatbot import core_chatbot as chatbot
+    from core.canvas_bridge import canvas_bridge  # Still using old canvas_bridge for now
+    from core.utilities import setup_file_logging
     from api.routes import router
     from api.websocket import websocket_endpoint
-except ImportError:
-    # Try absolute imports if relative imports fail
-    import sys
-    from pathlib import Path
-    backend_path = Path(__file__).parent
-    sys.path.insert(0, str(backend_path))
-    
-    from core.chatbot import chatbot
-    from core.canvas_bridge import canvas_bridge
-    from api.routes import router
-    from api.websocket import websocket_endpoint
+    print("[SUCCESS] Core architecture imports successful")
+except ImportError as e:
+    print(f"[ERROR] Failed to import core architecture: {e}")
+    print("[ERROR] Make sure core is properly implemented")
+    raise
 
 
 class AIDataAnalystServer:
@@ -146,6 +158,13 @@ class AIDataAnalystServer:
                     return FileResponse(js_path, media_type="application/javascript")
                 raise HTTPException(status_code=404, detail=f"JavaScript file not found at {js_path}")
             
+
+            @self.app.get("/favicon.ico")
+            async def serve_favicon():
+                # Return a simple 204 No Content to stop the 404 errors
+                from fastapi import Response
+                return Response(status_code=204)
+            
             print(f"[SUCCESS] Frontend static files mounted from: {frontend_dir}")
         else:
             print(f"[WARNING] Frontend directory not found: {frontend_dir}")
@@ -187,22 +206,27 @@ app = server.app
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    print("[CONFIG] Initializing AI Data Analyst v0.1...")
+    print("[CONFIG] Initializing AI Data Analyst v0.1 with Core Architecture...")
+    
+    # Setup file logging for debug mode
+    if DEBUG_MODE:
+        setup_file_logging()
     
     # Check if chatbot is properly initialized
     if chatbot.llm_client is None:
         print("[WARNING] Warning: LLM client not initialized. Check OpenAI API key.")
     else:
-        print("[SUCCESS] Chatbot initialized successfully")
+        print("[SUCCESS] Core Chatbot initialized successfully")
+        print(f"[INFO] Available functions: {', '.join(chatbot.get_available_functions())}")
     
-    print("[SUCCESS] AI Data Analyst v0.1 ready!")
+    print("[SUCCESS] AI Data Analyst v0.1 ready with Core Architecture (Phase 1)!")
 
 
 # Shutdown event
 @app.on_event("shutdown")
 async def shutdown_event():
     """Clean up on shutdown"""
-    print("🛑 Shutting down AI Data Analyst v0.1...")
+    print("🛑 Shutting down AI Data Analyst v0.1 with Core Architecture...")
     
     # Clear conversation history
     chatbot.clear_conversation_history()
@@ -210,7 +234,7 @@ async def shutdown_event():
     # Clear canvas state
     await canvas_bridge.clear_canvas()
     
-    print("[SUCCESS] Shutdown complete")
+    print("[SUCCESS] Core Architecture shutdown complete")
 
 
 def main():
