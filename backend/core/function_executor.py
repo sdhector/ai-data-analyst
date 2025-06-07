@@ -43,7 +43,8 @@ class coreFunctionExecutor:
             "create_container",
             "resize_container",
             "move_container",
-            "delete_container"
+            "delete_container",
+            "clear_canvas"
         ]
         
         if self.debug_mode:

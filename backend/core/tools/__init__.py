@@ -11,7 +11,8 @@ from .canvas_management_tools import (
     create_container_tool,
     resize_container_tool,
     move_container_tool,
-    delete_container_tool
+    delete_container_tool,
+    clear_canvas_tool
 )
 
 __all__ = [
@@ -20,5 +21,6 @@ __all__ = [
     "create_container_tool",
     "resize_container_tool",
     "move_container_tool",
-    "delete_container_tool"
+    "delete_container_tool",
+    "clear_canvas_tool"
 ] 

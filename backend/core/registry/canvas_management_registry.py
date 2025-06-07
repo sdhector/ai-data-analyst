@@ -14,7 +14,8 @@ from ..tools import (
     create_container_tool,
     resize_container_tool,
     move_container_tool,
-    delete_container_tool
+    delete_container_tool,
+    clear_canvas_tool
 )
 from ..utilities import (
     log_component_entry,
@@ -158,6 +159,15 @@ def get_canvas_management_function_schemas() -> List[Dict[str, Any]]:
                     }
                 },
                 "required": ["container_id"]
+            }
+        },
+        {
+            "name": "clear_canvas",
+            "description": "Clear all elements from the canvas, resetting it to a blank state",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
             }
         }
     ]
@@ -394,12 +404,30 @@ async def execute_canvas_management_tool(function_name: str, arguments: Dict[str
             log_component_exit("REGISTRY", "execute_canvas_management_tool", result.get('status', 'unknown'))
             return result
             
+        elif function_name == "clear_canvas":
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🎯 Executing clear_canvas tool")
+            
+            # No parameters required for clear_canvas
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🔄 Calling clear_canvas_tool()")
+            
+            log_handover("REGISTRY", "TOOL", "clear_canvas", "")
+            
+            result = await clear_canvas_tool()
+            
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🏁 Tool returned: {result.get('status', 'unknown')}")
+            
+            log_component_exit("REGISTRY", "execute_canvas_management_tool", result.get('status', 'unknown'))
+            return result
+            
         else:
             return {
                 "status": "error",
                 "message": f"Unknown canvas management function: {function_name}",
                 "error_code": "UNKNOWN_FUNCTION",
-                "available_functions": ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container", "move_container", "delete_container"],
+                "available_functions": ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container", "move_container", "delete_container", "clear_canvas"],
                 "requested_function": function_name
             }
             
@@ -429,7 +457,8 @@ def get_tool_by_name(tool_name: str) -> callable:
         "create_container": create_container_tool,
         "resize_container": resize_container_tool,
         "move_container": move_container_tool,
-        "delete_container": delete_container_tool
+        "delete_container": delete_container_tool,
+        "clear_canvas": clear_canvas_tool
     }
     return tools.get(tool_name)
 
@@ -486,6 +515,13 @@ def get_tool_metadata(tool_name: str) -> Dict[str, Any]:
             "category": "canvas_management",
             "parameters": ["container_id"],
             "returns": "Container deletion result with freed space information"
+        },
+        "clear_canvas": {
+            "name": "clear_canvas",
+            "description": "Clear all elements from the canvas with validation and intelligent feedback",
+            "category": "canvas_management",
+            "parameters": [],
+            "returns": "Canvas clear result with cleared elements summary and space analysis"
         }
     }
     return metadata.get(tool_name, {})
@@ -498,4 +534,4 @@ def list_available_tools() -> List[str]:
     Returns:
         List of tool names
     """
-    return ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container", "move_container", "delete_container"] 
+    return ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container", "move_container", "delete_container", "clear_canvas"] 

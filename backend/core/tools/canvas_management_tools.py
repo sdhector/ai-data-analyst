@@ -17,7 +17,8 @@ from ..primitives import (
     create_container_primitive,
     resize_container_primitive,
     move_container_primitive,
-    delete_container_primitive
+    delete_container_primitive,
+    clear_canvas_primitive
 )
 from ..utilities import (
     log_component_entry,
@@ -950,4 +951,137 @@ async def delete_container_tool(container_id: str) -> Dict[str, Any]:
         }
         
         log_component_exit("TOOL", "delete_container_tool", "ERROR", str(e))
+        return error_result
+
+
+async def clear_canvas_tool() -> Dict[str, Any]:
+    """
+    Clear all elements from the canvas with validation and intelligent feedback.
+    
+    Returns:
+        Dict with operation result and detailed information
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[TOOL] clear_canvas_tool called")
+    
+    log_component_entry("TOOL", "clear_canvas_tool", "")
+    
+    try:
+        # Get current canvas dimensions for context
+        canvas_result = await get_canvas_dimensions_primitive()
+        if canvas_result["status"] != "success":
+            return {
+                "status": "error",
+                "message": "Failed to get current canvas dimensions",
+                "error_code": "CANVAS_STATE_ERROR",
+                "details": canvas_result
+            }
+        
+        canvas_dims = canvas_result["dimensions"]
+        canvas_width = canvas_dims["width"]
+        canvas_height = canvas_dims["height"]
+        
+        # Execute the primitive operation
+        if debug_mode:
+            logger.debug(f"[TOOL] Calling primitive: clear_canvas_primitive()")
+        
+        log_handover("TOOL", "PRIMITIVE", "clear_canvas", "")
+        
+        result = await clear_canvas_primitive()
+        
+        if debug_mode:
+            logger.debug(f"[TOOL] Primitive returned: {result.get('status', 'unknown')}")
+        
+        if result["status"] != "success":
+            # Enhance error messages with helpful suggestions
+            error_code = result.get("error_code", "UNKNOWN_ERROR")
+            enhanced_suggestions = [
+                "Check canvas state and try again",
+                "Ensure canvas system is properly initialized",
+                "Verify WebSocket connections are active"
+            ]
+            
+            return {
+                "status": "error",
+                "message": result.get("error", "Failed to clear canvas"),
+                "error_code": error_code,
+                "primitive_result": result,
+                "suggestions": enhanced_suggestions
+            }
+        
+        # Calculate additional context for successful clear
+        cleared_elements = result["cleared_elements"]
+        canvas_context = result["canvas_context"]
+        final_state = result["final_state"]
+        
+        containers_cleared = cleared_elements["total_containers"]
+        area_cleared = cleared_elements["total_area_cleared"]
+        area_percentage = canvas_context["area_cleared_percentage"]
+        
+        # Generate recommendations based on what was cleared
+        recommendations = []
+        if containers_cleared == 0:
+            recommendations = [
+                "Canvas was already empty",
+                "Ready for new content creation",
+                "All canvas space is now available"
+            ]
+        elif containers_cleared == 1:
+            recommendations = [
+                f"Cleared 1 container, freed {area_percentage:.1f}% of canvas space",
+                "Canvas is now ready for new content",
+                "Consider the layout for your next elements"
+            ]
+        else:
+            recommendations = [
+                f"Cleared {containers_cleared} containers, freed {area_percentage:.1f}% of canvas space",
+                "Canvas is now completely empty and ready for new content",
+                "You have full canvas space available for new layouts"
+            ]
+        
+        final_result = {
+            "status": "success",
+            "message": f"Canvas successfully cleared - removed {containers_cleared} container(s)",
+            "operation": "clear_canvas",
+            "cleared_summary": {
+                "containers_removed": containers_cleared,
+                "total_area_freed": area_cleared,
+                "area_percentage_freed": round(area_percentage, 1),
+                "container_details": cleared_elements["containers"]
+            },
+            "canvas_context": {
+                "canvas_size": {"width": canvas_width, "height": canvas_height},
+                "canvas_area": canvas_context["canvas_area"],
+                "is_empty": final_state["is_empty"]
+            },
+            "space_analysis": {
+                "available_area": canvas_context["canvas_area"],
+                "utilization_before": f"{area_percentage:.1f}%",
+                "utilization_after": "0%",
+                "space_freed": area_cleared
+            },
+            "recommendations": recommendations,
+            "next_actions": [
+                "Canvas is ready for new container creation",
+                "Consider your layout strategy for new elements",
+                "Use create_container() to add new elements"
+            ],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "clear_canvas_tool", "SUCCESS", f"Cleared {containers_cleared} containers")
+        return final_result
+        
+    except Exception as e:
+        error_result = {
+            "status": "error",
+            "message": f"Unexpected error clearing canvas: {str(e)}",
+            "error_code": "UNEXPECTED_ERROR",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "clear_canvas_tool", "ERROR", str(e))
         return error_result 

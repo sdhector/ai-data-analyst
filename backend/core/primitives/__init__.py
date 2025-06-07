@@ -11,7 +11,8 @@ from .canvas_operations import (
     create_container_primitive,
     resize_container_primitive,
     move_container_primitive,
-    delete_container_primitive
+    delete_container_primitive,
+    clear_canvas_primitive
 )
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "create_container_primitive",
     "resize_container_primitive",
     "move_container_primitive",
-    "delete_container_primitive"
+    "delete_container_primitive",
+    "clear_canvas_primitive"
 ] 

@@ -844,4 +844,130 @@ async def delete_container_primitive(container_id: str) -> Dict[str, Any]:
         }
         
         log_component_exit("PRIMITIVE", "delete_container_primitive", "ERROR", str(e))
+        return error_result
+
+
+async def clear_canvas_primitive() -> Dict[str, Any]:
+    """
+    Clear all elements from the canvas directly.
+    
+    Returns:
+        Dict with operation result and details
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[PRIMITIVE] clear_canvas_primitive STARTED")
+    
+    log_component_entry("PRIMITIVE", "clear_canvas_primitive", "")
+    
+    try:
+        # Get current canvas state for reporting
+        current_containers = canvas_bridge.canvas_state.get("containers", {})
+        container_count = len(current_containers)
+        container_ids = list(current_containers.keys())
+        
+        # Calculate total area being cleared
+        total_cleared_area = 0
+        container_details = []
+        
+        for container_id, container_data in current_containers.items():
+            area = container_data.get("width", 0) * container_data.get("height", 0)
+            total_cleared_area += area
+            container_details.append({
+                "id": container_id,
+                "x": container_data.get("x", 0),
+                "y": container_data.get("y", 0),
+                "width": container_data.get("width", 0),
+                "height": container_data.get("height", 0),
+                "area": area
+            })
+        
+        # Get canvas dimensions for context
+        canvas_size = canvas_bridge.get_canvas_size()
+        canvas_width = canvas_size.get('width', 800)
+        canvas_height = canvas_size.get('height', 600)
+        canvas_area = canvas_width * canvas_height
+        
+        # Generate unique command ID for tracking
+        import uuid
+        command_id = f"cmd_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+        
+        # Clear all containers from canvas state
+        canvas_bridge.canvas_state["containers"] = {}
+        canvas_bridge.canvas_state["last_updated"] = datetime.now().isoformat()
+        canvas_bridge.canvas_state["last_cleared"] = datetime.now().isoformat()
+        
+        # Broadcast canvas clear command to frontend
+        clear_message = {
+            "type": "canvas_command",
+            "command": "clear_canvas",
+            "command_id": command_id,
+            "data": {
+                "cleared_containers": container_ids,
+                "container_count": container_count
+            }
+        }
+        
+        # Check if there are any WebSocket connections
+        connection_count = len(canvas_bridge.websocket_connections)
+        print(f"[PRIMITIVE] Broadcasting canvas clear to {connection_count} WebSocket connection(s)")
+        
+        if connection_count == 0:
+            print("[WARNING] No WebSocket connections found - frontend may not be connected!")
+        
+        # Track the pending command
+        canvas_bridge.track_pending_command(command_id, "clear_canvas", {
+            "cleared_containers": container_ids,
+            "container_count": container_count,
+            "cleared_area": total_cleared_area
+        })
+        
+        await canvas_bridge.broadcast_to_frontend(clear_message)
+        
+        print(f"[PRIMITIVE] Canvas cleared successfully - removed {container_count} container(s)")
+        
+        if debug_mode:
+            logger.debug(f"[PRIMITIVE] clear_canvas_primitive COMPLETED successfully")
+        
+        result = {
+            "status": "success",
+            "operation": "clear_canvas",
+            "cleared_elements": {
+                "containers": container_details,
+                "total_containers": container_count,
+                "total_area_cleared": total_cleared_area
+            },
+            "canvas_context": {
+                "canvas_size": {"width": canvas_width, "height": canvas_height},
+                "canvas_area": canvas_area,
+                "area_cleared_percentage": (total_cleared_area / canvas_area * 100) if canvas_area > 0 else 0
+            },
+            "final_state": {
+                "containers": {},
+                "container_count": 0,
+                "is_empty": True
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("PRIMITIVE", "clear_canvas_primitive", "SUCCESS", f"Cleared {container_count} containers")
+        return result
+        
+    except Exception as e:
+        print(f"[PRIMITIVE ERROR] Failed to clear canvas: {e}")
+        
+        if debug_mode:
+            logger.debug(f"[PRIMITIVE] clear_canvas_primitive FAILED: {e}")
+        
+        error_result = {
+            "status": "error",
+            "operation": "clear_canvas",
+            "error": str(e),
+            "error_code": "UNEXPECTED_ERROR",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("PRIMITIVE", "clear_canvas_primitive", "ERROR", str(e))
         return error_result 
