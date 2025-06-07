@@ -48,6 +48,8 @@
     </div>
 
     <script>
+        console.log('🔍 HTML loaded, about to load script...');
+        
         // Force cache refresh with random number + timestamp
         const timestamp = new Date().getTime();
         const random = Math.random().toString(36).substring(7);
@@ -56,12 +58,20 @@
         script.onload = function() {
             console.log('🔄 Script loaded with cache-busting:', timestamp, random);
             console.log('🔍 Available functions:', typeof executeCanvasCommand !== 'undefined' ? 'executeCanvasCommand found' : 'executeCanvasCommand NOT found');
-            // Test if we have the new version
-            if (typeof executeCanvasCommand !== 'undefined') {
-                console.log('🧪 Testing executeCanvasCommand with move_container...');
-                // This should trigger our debugging logs
-                executeCanvasCommand('move_container', {container_id: 'test', x: 0, y: 0}, 'test');
-            }
+            console.log('🔍 setupEventListeners function:', typeof setupEventListeners !== 'undefined' ? 'found' : 'NOT found');
+            console.log('🔍 Chat messages element:', document.getElementById('chatMessages') ? 'found' : 'NOT found');
+            
+            // Check if chat input was created
+            setTimeout(() => {
+                const chatInput = document.getElementById('chatInput');
+                console.log('🔍 Chat input element:', chatInput ? 'found' : 'NOT found');
+                if (!chatInput) {
+                    console.error('❌ Chat input not created! Checking for errors...');
+                }
+            }, 1000);
+        };
+        script.onerror = function() {
+            console.error('❌ Failed to load script!');
         };
         document.head.appendChild(script);
     </script>

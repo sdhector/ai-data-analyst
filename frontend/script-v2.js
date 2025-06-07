@@ -21,14 +21,23 @@ let isConnected = false;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
 
-// Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
+// Initialize when DOM is loaded OR when script loads (for dynamic loading)
+function initializeApp() {
+    console.log('🚀 Initializing AI Data Analyst v0.1...');
     initializeCanvas();
     setupEventListeners();
     updateStateDisplay();
     initializeWebSocket();
-    console.log('AI Data Analyst v0.1 initialized');
-});
+    console.log('✅ AI Data Analyst v0.1 initialized');
+}
+
+// Check if DOM is already loaded (for dynamic script loading)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+    // DOM is already loaded, initialize immediately
+    initializeApp();
+}
 
 /**
  * Initialize WebSocket connection
