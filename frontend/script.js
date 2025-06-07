@@ -281,8 +281,16 @@ function handleUserFeedback(message) {
  * Execute canvas command from backend
  */
 function executeCanvasCommand(command, data, commandId = null) {
-    console.log(`🎨 [v1.2] Executing canvas command: ${command}`, data);
+    console.log(`🎨 [v1.2] Executing canvas command: "${command}" (type: ${typeof command})`, data);
+    console.log(`🔍 [v1.2] Command length: ${command.length}, Command charCodes:`, Array.from(command).map(c => c.charCodeAt(0)));
     console.log(`🔍 [v1.2] Available cases: create_container, delete_container, modify_container, move_container, resize_container, clear_canvas, edit_canvas_size, take_screenshot`);
+    
+    // Test exact match
+    if (command === 'move_container') {
+        console.log('✅ Direct comparison with move_container: TRUE');
+    } else {
+        console.log('❌ Direct comparison with move_container: FALSE');
+    }
     
     switch (command) {
         case 'create_container':
@@ -301,6 +309,7 @@ function executeCanvasCommand(command, data, commandId = null) {
             break;
             
         case 'move_container':
+            console.log('🎯 [v1.2] MATCHED move_container case!');
             moveContainer(data.container_id, data.x, data.y, commandId);
             break;
             
