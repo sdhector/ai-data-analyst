@@ -345,4 +345,202 @@ async def create_container_primitive(container_id: str, x: int, y: int, width: i
         }
         
         log_component_exit("PRIMITIVE", "create_container_primitive", "ERROR", str(e))
+        return error_result
+
+
+async def resize_container_primitive(container_id: str, width: int, height: int) -> Dict[str, Any]:
+    """
+    Resize an existing container directly.
+    
+    Args:
+        container_id: Identifier of the container to resize
+        width: New container width in pixels
+        height: New container height in pixels
+        
+    Returns:
+        Dict with operation result and details
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[PRIMITIVE] resize_container_primitive STARTED with container_id={container_id}, width={width}, height={height}")
+    
+    log_component_entry("PRIMITIVE", "resize_container_primitive", f"container_id={container_id}, width={width}, height={height}")
+    
+    try:
+        # Validate container exists
+        existing_containers = canvas_bridge.canvas_state.get("containers", {})
+        if container_id not in existing_containers:
+            error_result = {
+                "status": "error",
+                "operation": "resize_container",
+                "error": f"Container ID '{container_id}' does not exist",
+                "error_code": "CONTAINER_NOT_FOUND",
+                "existing_container_ids": list(existing_containers.keys()),
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "resize_container_primitive", "ERROR", f"Container not found: {container_id}")
+            return error_result
+        
+        # Validate dimensions
+        if not isinstance(width, (int, float)) or not isinstance(height, (int, float)) or width <= 0 or height <= 0:
+            error_result = {
+                "status": "error",
+                "operation": "resize_container",
+                "error": "Width and height must be positive numeric values",
+                "error_code": "INVALID_DIMENSIONS",
+                "provided_width": width,
+                "provided_height": height,
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "resize_container_primitive", "ERROR", "Invalid dimensions")
+            return error_result
+        
+        # Convert to integers for consistency
+        width, height = int(width), int(height)
+        
+        # Get current container data
+        current_container = existing_containers[container_id]
+        current_x = current_container["x"]
+        current_y = current_container["y"]
+        old_width = current_container["width"]
+        old_height = current_container["height"]
+        
+        # Validate placement within canvas bounds
+        canvas_size = canvas_bridge.get_canvas_size()
+        canvas_width = canvas_size.get('width', 800)
+        canvas_height = canvas_size.get('height', 600)
+        
+        if current_x < 0 or current_y < 0 or current_x + width > canvas_width or current_y + height > canvas_height:
+            error_result = {
+                "status": "error",
+                "operation": "resize_container",
+                "error": "Resized container bounding box extends outside canvas boundaries",
+                "error_code": "OUT_OF_BOUNDS",
+                "canvas_size": {"width": canvas_width, "height": canvas_height},
+                "container_position": {"x": current_x, "y": current_y},
+                "new_dimensions": {"width": width, "height": height},
+                "new_bounds": {"x": current_x, "y": current_y, "width": width, "height": height},
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "resize_container_primitive", "ERROR", "Out of bounds")
+            return error_result
+        
+        # Validate no overlap with other existing containers
+        existing_container_list = canvas_bridge.get_existing_containers()
+        overlapping_containers = []
+        
+        for existing in existing_container_list:
+            # Skip the container we're resizing
+            if existing['id'] == container_id:
+                continue
+                
+            if canvas_bridge.check_overlap(current_x, current_y, width, height, 
+                                         existing['x'], existing['y'], 
+                                         existing['width'], existing['height']):
+                overlapping_containers.append(existing['id'])
+        
+        if overlapping_containers:
+            error_result = {
+                "status": "error",
+                "operation": "resize_container",
+                "error": "Resized container would overlap with existing containers",
+                "error_code": "OVERLAP_DETECTED",
+                "overlapping_containers": overlapping_containers,
+                "container_position": {"x": current_x, "y": current_y},
+                "new_dimensions": {"width": width, "height": height},
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "resize_container_primitive", "ERROR", f"Overlaps with: {overlapping_containers}")
+            return error_result
+        
+        # Generate unique command ID for tracking
+        import uuid
+        command_id = f"cmd_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+        
+        # Update container in canvas state
+        canvas_bridge.canvas_state["containers"][container_id].update({
+            "width": width,
+            "height": height,
+            "modified_at": datetime.now().isoformat()
+        })
+        canvas_bridge.canvas_state["last_updated"] = datetime.now().isoformat()
+        
+        # Broadcast container resize command to frontend
+        resize_message = {
+            "type": "canvas_command",
+            "command": "resize_container",
+            "command_id": command_id,
+            "data": {
+                "container_id": container_id,
+                "x": current_x,
+                "y": current_y,
+                "width": width,
+                "height": height,
+                "old_width": old_width,
+                "old_height": old_height
+            }
+        }
+        
+        # Check if there are any WebSocket connections
+        connection_count = len(canvas_bridge.websocket_connections)
+        print(f"[PRIMITIVE] Broadcasting container resize to {connection_count} WebSocket connection(s)")
+        
+        if connection_count == 0:
+            print("[WARNING] No WebSocket connections found - frontend may not be connected!")
+        
+        # Track the pending command
+        canvas_bridge.track_pending_command(command_id, "resize_container", {
+            "container_id": container_id,
+            "x": current_x,
+            "y": current_y,
+            "width": width,
+            "height": height,
+            "old_width": old_width,
+            "old_height": old_height
+        })
+        
+        await canvas_bridge.broadcast_to_frontend(resize_message)
+        
+        print(f"[PRIMITIVE] Container '{container_id}' resized from {old_width}x{old_height} to {width}x{height}")
+        
+        if debug_mode:
+            logger.debug(f"[PRIMITIVE] resize_container_primitive COMPLETED successfully")
+        
+        result = {
+            "status": "success",
+            "operation": "resize_container",
+            "container": {
+                "id": container_id,
+                "x": current_x,
+                "y": current_y,
+                "width": width,
+                "height": height
+            },
+            "old_dimensions": {"width": old_width, "height": old_height},
+            "new_dimensions": {"width": width, "height": height},
+            "canvas_size": {"width": canvas_width, "height": canvas_height},
+            "total_containers": len(canvas_bridge.canvas_state["containers"]),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("PRIMITIVE", "resize_container_primitive", "SUCCESS", f"Resized {container_id} to {width}x{height}")
+        return result
+        
+    except Exception as e:
+        print(f"[PRIMITIVE ERROR] Failed to resize container: {e}")
+        
+        if debug_mode:
+            logger.debug(f"[PRIMITIVE] resize_container_primitive FAILED: {e}")
+        
+        error_result = {
+            "status": "error",
+            "operation": "resize_container",
+            "error": str(e),
+            "error_code": "UNEXPECTED_ERROR",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("PRIMITIVE", "resize_container_primitive", "ERROR", str(e))
         return error_result 

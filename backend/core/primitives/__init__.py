@@ -8,12 +8,14 @@ These functions have single responsibility, no validation logic, and minimal dep
 from .canvas_operations import (
     set_canvas_dimensions_primitive,
     get_canvas_dimensions_primitive,
-    create_container_primitive
+    create_container_primitive,
+    resize_container_primitive
 )
 
 __all__ = [
     # Canvas operations
     "set_canvas_dimensions_primitive",
     "get_canvas_dimensions_primitive",
-    "create_container_primitive"
+    "create_container_primitive",
+    "resize_container_primitive"
 ] 

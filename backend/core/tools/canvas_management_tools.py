@@ -14,7 +14,8 @@ from datetime import datetime
 from ..primitives import (
     set_canvas_dimensions_primitive,
     get_canvas_dimensions_primitive,
-    create_container_primitive
+    create_container_primitive,
+    resize_container_primitive
 )
 from ..utilities import (
     log_component_entry,
@@ -431,4 +432,201 @@ async def create_container_tool(container_id: str, x: int, y: int, width: int, h
         }
         
         log_component_exit("TOOL", "create_container_tool", "ERROR", str(e))
+        return error_result
+
+
+async def resize_container_tool(container_id: str, width: int, height: int) -> Dict[str, Any]:
+    """
+    Resize an existing container with validation and intelligent feedback.
+    
+    Args:
+        container_id: Identifier of the container to resize (must exist)
+        width: New container width in pixels (must be positive integer)
+        height: New container height in pixels (must be positive integer)
+        
+    Returns:
+        Dict with operation result and detailed information
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[TOOL] resize_container_tool called with container_id={container_id}, width={width}, height={height}")
+    
+    log_component_entry("TOOL", "resize_container_tool", f"container_id={container_id}, width={width}, height={height}")
+    
+    try:
+        # Basic validation
+        if not isinstance(container_id, str) or not container_id.strip():
+            return {
+                "status": "error",
+                "message": "Container ID must be a non-empty string",
+                "error_code": "INVALID_CONTAINER_ID",
+                "provided_container_id": container_id,
+                "suggestions": [
+                    "Provide a valid container identifier",
+                    "Use get_canvas_state to see existing containers"
+                ]
+            }
+        
+        if not isinstance(width, int) or not isinstance(height, int):
+            return {
+                "status": "error",
+                "message": "Width and height must be integers",
+                "error_code": "INVALID_DIMENSIONS",
+                "provided_width": width,
+                "provided_height": height,
+                "suggestions": [
+                    "Provide width and height as positive integers",
+                    "Example: resize_container('my_container', 300, 200)"
+                ]
+            }
+        
+        if width <= 0 or height <= 0:
+            return {
+                "status": "error",
+                "message": "Width and height must be positive integers",
+                "error_code": "INVALID_SIZE",
+                "provided_width": width,
+                "provided_height": height,
+                "suggestions": [
+                    "Use positive values greater than 0",
+                    "Minimum recommended size: 50x50",
+                    "Consider the canvas size and other containers when choosing dimensions"
+                ]
+            }
+        
+        # Get current canvas dimensions for context
+        canvas_result = await get_canvas_dimensions_primitive()
+        if canvas_result["status"] != "success":
+            return {
+                "status": "error",
+                "message": "Failed to get current canvas dimensions",
+                "error_code": "CANVAS_STATE_ERROR",
+                "details": canvas_result
+            }
+        
+        canvas_dims = canvas_result["dimensions"]
+        canvas_width = canvas_dims["width"]
+        canvas_height = canvas_dims["height"]
+        
+        # Execute the primitive operation
+        if debug_mode:
+            logger.debug(f"[TOOL] Calling primitive: resize_container_primitive({container_id}, {width}, {height})")
+        
+        log_handover("TOOL", "PRIMITIVE", "resize_container", f"container_id={container_id}, width={width}, height={height}")
+        
+        result = await resize_container_primitive(container_id, width, height)
+        
+        if debug_mode:
+            logger.debug(f"[TOOL] Primitive returned: {result.get('status', 'unknown')}")
+        
+        if result["status"] != "success":
+            # Enhance error messages with helpful suggestions
+            error_code = result.get("error_code", "UNKNOWN_ERROR")
+            enhanced_suggestions = []
+            
+            if error_code == "CONTAINER_NOT_FOUND":
+                existing_ids = result.get("existing_container_ids", [])
+                enhanced_suggestions = [
+                    f"Container '{container_id}' does not exist",
+                    "Check the container ID spelling",
+                    f"Available containers: {', '.join(existing_ids) if existing_ids else 'None'}"
+                ]
+            elif error_code == "OUT_OF_BOUNDS":
+                container_pos = result.get("container_position", {})
+                x, y = container_pos.get("x", 0), container_pos.get("y", 0)
+                max_width = canvas_width - x
+                max_height = canvas_height - y
+                enhanced_suggestions = [
+                    f"Resized container would extend outside canvas bounds ({canvas_width}x{canvas_height})",
+                    f"Container is at position ({x}, {y})",
+                    f"Maximum size at this position: {max_width}x{max_height}",
+                    "Consider reducing size or moving the container first"
+                ]
+            elif error_code == "OVERLAP_DETECTED":
+                overlapping = result.get("overlapping_containers", [])
+                enhanced_suggestions = [
+                    f"Resized container would overlap with: {', '.join(overlapping)}",
+                    "Try a smaller size that doesn't overlap",
+                    "Consider moving other containers first",
+                    "Use get_canvas_state to see container positions"
+                ]
+            else:
+                enhanced_suggestions = [
+                    "Check container parameters and try again",
+                    "Ensure canvas is in a valid state"
+                ]
+            
+            return {
+                "status": "error",
+                "message": result.get("error", "Failed to resize container"),
+                "error_code": error_code,
+                "primitive_result": result,
+                "suggestions": enhanced_suggestions
+            }
+        
+        # Calculate additional context for successful resize
+        old_dims = result["old_dimensions"]
+        new_dims = result["new_dimensions"]
+        old_area = old_dims["width"] * old_dims["height"]
+        new_area = new_dims["width"] * new_dims["height"]
+        area_change_percent = ((new_area - old_area) / old_area) * 100 if old_area > 0 else 0
+        
+        canvas_area = canvas_width * canvas_height
+        new_area_percentage = (new_area / canvas_area) * 100 if canvas_area > 0 else 0
+        
+        container_info = result["container"]
+        
+        final_result = {
+            "status": "success",
+            "message": f"Container '{container_id}' successfully resized from {old_dims['width']}x{old_dims['height']} to {width}x{height}",
+            "operation": "resize_container",
+            "container": container_info,
+            "size_changes": {
+                "old_dimensions": old_dims,
+                "new_dimensions": new_dims,
+                "width_change": width - old_dims["width"],
+                "height_change": height - old_dims["height"],
+                "area_change_percent": round(area_change_percent, 1)
+            },
+            "canvas_context": {
+                "canvas_size": {"width": canvas_width, "height": canvas_height},
+                "container_area_percentage": round(new_area_percentage, 1),
+                "total_containers": result["total_containers"]
+            },
+            "positioning": {
+                "position": {"x": container_info["x"], "y": container_info["y"]},
+                "distance_from_edges": {
+                    "left": container_info["x"],
+                    "top": container_info["y"],
+                    "right": canvas_width - (container_info["x"] + width),
+                    "bottom": canvas_height - (container_info["y"] + height)
+                }
+            },
+            "recommendations": [
+                f"Container area {'increased' if area_change_percent > 0 else 'decreased'} by {abs(area_change_percent):.1f}%",
+                f"Container now occupies {new_area_percentage:.1f}% of canvas area",
+                "Container is ready for content updates or further modifications"
+            ],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "resize_container_tool", "SUCCESS", f"Resized {container_id} to {width}x{height}")
+        return final_result
+        
+    except Exception as e:
+        error_result = {
+            "status": "error",
+            "message": f"Unexpected error resizing container: {str(e)}",
+            "error_code": "UNEXPECTED_ERROR",
+            "provided_parameters": {
+                "container_id": container_id,
+                "width": width,
+                "height": height
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "resize_container_tool", "ERROR", str(e))
         return error_result 

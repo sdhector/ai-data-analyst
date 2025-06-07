@@ -8,11 +8,13 @@ These provide AI-friendly interfaces with comprehensive error handling and rich 
 from .canvas_management_tools import (
     set_canvas_dimensions_tool,
     get_canvas_dimensions_tool,
-    create_container_tool
+    create_container_tool,
+    resize_container_tool
 )
 
 __all__ = [
     "set_canvas_dimensions_tool",
     "get_canvas_dimensions_tool",
-    "create_container_tool"
+    "create_container_tool",
+    "resize_container_tool"
 ] 
