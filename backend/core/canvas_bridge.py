@@ -28,6 +28,24 @@ class CanvasBridge:
                 "auto_adjust": True,
                 "overlap_prevention": False
             },
+            
+            # Auto-Layout System State
+            "layout_mode": "auto",  # "auto" | "manual"
+            "auto_layout_enabled": True,
+            "layout_engine_version": "1.0",
+            "last_auto_layout_time": None,
+            
+            # Container tracking for auto-layout
+            "manual_override_containers": set(),  # IDs of manually positioned containers
+            "container_creation_order": [],       # Order containers were created
+            "layout_history": [],                 # Previous layout states for undo
+            
+            # User preferences
+            "preferred_container_gap": 10,
+            "preferred_canvas_padding": None,     # None = auto-calculate
+            "layout_animation_enabled": True,
+            "auto_reflow_on_deletion": True,
+            
             "last_updated": datetime.now().isoformat()
         }
         
@@ -134,6 +152,140 @@ class CanvasBridge:
         for cmd_id in to_remove:
             print(f"[CANVAS_BRIDGE] 🧹 Cleaning up old command: {cmd_id}")
             del self.pending_commands[cmd_id]
+    
+    def get_layout_state(self) -> Dict[str, Any]:
+        """Get current layout state information"""
+        return {
+            "auto_layout_enabled": self.canvas_state["auto_layout_enabled"],
+            "layout_mode": self.canvas_state["layout_mode"], 
+            "container_count": len(self.canvas_state["containers"]),
+            "manual_containers": list(self.canvas_state["manual_override_containers"]),
+            "container_creation_order": self.canvas_state["container_creation_order"].copy(),
+            "layout_engine_version": self.canvas_state["layout_engine_version"],
+            "last_auto_layout_time": self.canvas_state["last_auto_layout_time"],
+            "preferences": {
+                "container_gap": self.canvas_state["preferred_container_gap"],
+                "canvas_padding": self.canvas_state["preferred_canvas_padding"],
+                "animation_enabled": self.canvas_state["layout_animation_enabled"],
+                "auto_reflow_on_deletion": self.canvas_state["auto_reflow_on_deletion"]
+            }
+        }
+    
+    async def set_layout_mode(self, mode: str, user_confirmed: bool = False, apply_to_existing: bool = False) -> Dict[str, Any]:
+        """Change layout mode with proper state transitions"""
+        
+        if mode not in ["auto", "manual"]:
+            return {
+                "status": "error",
+                "error": f"Invalid layout mode: {mode}. Must be 'auto' or 'manual'.",
+                "current_mode": self.canvas_state["layout_mode"]
+            }
+        
+        current_mode = self.canvas_state["layout_mode"]
+        
+        if current_mode == mode:
+            return {
+                "status": "success",
+                "message": f"Layout mode already set to '{mode}'",
+                "mode": mode,
+                "no_change": True
+            }
+        
+        # Switching from auto to manual
+        if mode == "manual" and self.canvas_state["auto_layout_enabled"]:
+            if not user_confirmed:
+                return {
+                    "status": "requires_confirmation",
+                    "message": "Switch to manual layout mode? This will disable automatic positioning for new containers.",
+                    "action_required": "confirm_set_layout_mode",
+                    "pending_operation": {
+                        "mode": "manual",
+                        "apply_to_existing": apply_to_existing
+                    }
+                }
+            
+            self.canvas_state["auto_layout_enabled"] = False
+            self.canvas_state["layout_mode"] = "manual"
+            
+            # Mark all existing containers as manually positioned
+            if apply_to_existing:
+                container_ids = list(self.canvas_state["containers"].keys())
+                self.canvas_state["manual_override_containers"].update(container_ids)
+            
+            self.canvas_state["last_updated"] = datetime.now().isoformat()
+            
+            return {
+                "status": "success", 
+                "message": "Layout mode changed to manual. New containers will require explicit positioning.",
+                "mode": "manual",
+                "auto_layout_enabled": False,
+                "existing_containers_affected": apply_to_existing,
+                "manual_container_count": len(self.canvas_state["manual_override_containers"])
+            }
+        
+        # Switching from manual to auto
+        elif mode == "auto" and not self.canvas_state["auto_layout_enabled"]:
+            if not user_confirmed:
+                container_count = len(self.canvas_state["containers"])
+                message = "Re-enable auto-layout mode?"
+                if container_count > 0 and apply_to_existing:
+                    message += f" This will reposition all {container_count} existing containers."
+                
+                return {
+                    "status": "requires_confirmation",
+                    "message": message,
+                    "action_required": "confirm_set_layout_mode",
+                    "pending_operation": {
+                        "mode": "auto",
+                        "apply_to_existing": apply_to_existing
+                    }
+                }
+            
+            self.canvas_state["auto_layout_enabled"] = True
+            self.canvas_state["layout_mode"] = "auto"
+            
+            # Clear manual override tracking if applying to existing
+            if apply_to_existing:
+                self.canvas_state["manual_override_containers"].clear()
+                # Note: Actual repositioning will be handled by tools layer
+            
+            self.canvas_state["last_updated"] = datetime.now().isoformat()
+            
+            return {
+                "status": "success",
+                "message": "Layout mode changed to auto. New containers will be automatically positioned.",
+                "mode": "auto", 
+                "auto_layout_enabled": True,
+                "existing_containers_affected": apply_to_existing,
+                "containers_to_reposition": len(self.canvas_state["containers"]) if apply_to_existing else 0
+            }
+        
+        return {
+            "status": "error",
+            "error": "Invalid state transition",
+            "current_mode": current_mode,
+            "requested_mode": mode
+        }
+    
+    def add_container_to_creation_order(self, container_id: str):
+        """Track container creation order for auto-layout"""
+        if container_id not in self.canvas_state["container_creation_order"]:
+            self.canvas_state["container_creation_order"].append(container_id)
+    
+    def remove_container_from_creation_order(self, container_id: str):
+        """Remove container from creation order tracking"""
+        if container_id in self.canvas_state["container_creation_order"]:
+            self.canvas_state["container_creation_order"].remove(container_id)
+    
+    def mark_container_as_manual(self, container_id: str):
+        """Mark a container as manually positioned"""
+        self.canvas_state["manual_override_containers"].add(container_id)
+        self.canvas_state["last_updated"] = datetime.now().isoformat()
+    
+    def mark_container_as_auto(self, container_id: str):
+        """Mark a container as auto-positioned"""
+        self.canvas_state["manual_override_containers"].discard(container_id)
+        self.canvas_state["last_updated"] = datetime.now().isoformat()
     
     def get_canvas_size(self) -> Dict[str, int]:
         """Get current canvas size"""

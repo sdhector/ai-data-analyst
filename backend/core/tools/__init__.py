@@ -12,7 +12,9 @@ from .canvas_management_tools import (
     resize_container_tool,
     move_container_tool,
     delete_container_tool,
-    clear_canvas_tool
+    clear_canvas_tool,
+    set_layout_mode_tool,
+    get_layout_mode_tool
 )
 
 __all__ = [
@@ -22,5 +24,7 @@ __all__ = [
     "resize_container_tool",
     "move_container_tool",
     "delete_container_tool",
-    "clear_canvas_tool"
+    "clear_canvas_tool",
+    "set_layout_mode_tool",
+    "get_layout_mode_tool"
 ] 

@@ -15,7 +15,9 @@ from ..tools import (
     resize_container_tool,
     move_container_tool,
     delete_container_tool,
-    clear_canvas_tool
+    clear_canvas_tool,
+    set_layout_mode_tool,
+    get_layout_mode_tool
 )
 from ..utilities import (
     log_component_entry,
@@ -164,6 +166,38 @@ def get_canvas_management_function_schemas() -> List[Dict[str, Any]]:
         {
             "name": "clear_canvas",
             "description": "Clear all elements from the canvas, resetting it to a blank state",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "set_layout_mode",
+            "description": "Set the canvas layout mode between auto-layout and manual positioning with smart confirmations",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mode": {
+                        "type": "string",
+                        "enum": ["auto", "manual"],
+                        "description": "Layout mode: 'auto' for automatic positioning, 'manual' for explicit control"
+                    },
+                    "apply_to_existing": {
+                        "type": "boolean",
+                        "description": "Whether to apply the mode change to existing containers (default: false)"
+                    },
+                    "force": {
+                        "type": "boolean",
+                        "description": "Skip confirmation prompts - use with caution (default: false)"
+                    }
+                },
+                "required": ["mode"]
+            }
+        },
+        {
+            "name": "get_layout_mode",
+            "description": "Get current layout mode and comprehensive container positioning analysis",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -422,12 +456,64 @@ async def execute_canvas_management_tool(function_name: str, arguments: Dict[str
             log_component_exit("REGISTRY", "execute_canvas_management_tool", result.get('status', 'unknown'))
             return result
             
+        elif function_name == "set_layout_mode":
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🎯 Executing set_layout_mode tool")
+            
+            mode = arguments.get("mode")
+            apply_to_existing = arguments.get("apply_to_existing", False)
+            force = arguments.get("force", False)
+            
+            # Check for missing required parameters
+            if mode is None:
+                if debug_mode:
+                    logger.debug(f"[REGISTRY] ❌ Missing parameters for set_layout_mode: mode")
+                return {
+                    "status": "error",
+                    "message": "Missing required parameter: mode",
+                    "error_code": "MISSING_PARAMETERS",
+                    "required_parameters": ["mode"],
+                    "missing_parameters": ["mode"],
+                    "provided_arguments": arguments
+                }
+            
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🔄 Calling set_layout_mode_tool({mode}, {apply_to_existing}, {force})")
+            
+            log_handover("REGISTRY", "TOOL", "set_layout_mode", f"mode={mode}, apply_to_existing={apply_to_existing}, force={force}")
+            
+            result = await set_layout_mode_tool(mode, apply_to_existing, force)
+            
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🏁 Tool returned: {result.get('status', 'unknown')}")
+            
+            log_component_exit("REGISTRY", "execute_canvas_management_tool", result.get('status', 'unknown'))
+            return result
+            
+        elif function_name == "get_layout_mode":
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🎯 Executing get_layout_mode tool")
+            
+            # No parameters required for get_layout_mode
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🔄 Calling get_layout_mode_tool()")
+            
+            log_handover("REGISTRY", "TOOL", "get_layout_mode", "")
+            
+            result = await get_layout_mode_tool()
+            
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🏁 Tool returned: {result.get('status', 'unknown')}")
+            
+            log_component_exit("REGISTRY", "execute_canvas_management_tool", result.get('status', 'unknown'))
+            return result
+            
         else:
             return {
                 "status": "error",
                 "message": f"Unknown canvas management function: {function_name}",
                 "error_code": "UNKNOWN_FUNCTION",
-                "available_functions": ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container", "move_container", "delete_container", "clear_canvas"],
+                "available_functions": ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container", "move_container", "delete_container", "clear_canvas", "set_layout_mode", "get_layout_mode"],
                 "requested_function": function_name
             }
             
@@ -458,7 +544,9 @@ def get_tool_by_name(tool_name: str) -> callable:
         "resize_container": resize_container_tool,
         "move_container": move_container_tool,
         "delete_container": delete_container_tool,
-        "clear_canvas": clear_canvas_tool
+        "clear_canvas": clear_canvas_tool,
+        "set_layout_mode": set_layout_mode_tool,
+        "get_layout_mode": get_layout_mode_tool
     }
     return tools.get(tool_name)
 
@@ -522,6 +610,20 @@ def get_tool_metadata(tool_name: str) -> Dict[str, Any]:
             "category": "canvas_management",
             "parameters": [],
             "returns": "Canvas clear result with cleared elements summary and space analysis"
+        },
+        "set_layout_mode": {
+            "name": "set_layout_mode",
+            "description": "Set the canvas layout mode between auto-layout and manual positioning",
+            "category": "layout_management",
+            "parameters": ["mode", "apply_to_existing", "force"],
+            "returns": "Layout mode change result with container impact analysis"
+        },
+        "get_layout_mode": {
+            "name": "get_layout_mode",
+            "description": "Get current layout mode and comprehensive container positioning analysis",
+            "category": "layout_management",
+            "parameters": [],
+            "returns": "Current layout state with detailed positioning information and recommendations"
         }
     }
     return metadata.get(tool_name, {})
@@ -534,4 +636,4 @@ def list_available_tools() -> List[str]:
     Returns:
         List of tool names
     """
-    return ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container", "move_container", "delete_container", "clear_canvas"] 
+    return ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container", "move_container", "delete_container", "clear_canvas", "set_layout_mode", "get_layout_mode"] 

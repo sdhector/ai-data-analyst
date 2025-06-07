@@ -20,6 +20,7 @@ from ..primitives import (
     delete_container_primitive,
     clear_canvas_primitive
 )
+from ..canvas_bridge import canvas_bridge
 from ..utilities import (
     log_component_entry,
     log_component_exit,
@@ -1084,4 +1085,344 @@ async def clear_canvas_tool() -> Dict[str, Any]:
         }
         
         log_component_exit("TOOL", "clear_canvas_tool", "ERROR", str(e))
-        return error_result 
+        return error_result
+
+
+# ================================
+# LAYOUT MANAGEMENT TOOLS
+# ================================
+
+async def set_layout_mode_tool(mode: str, apply_to_existing: bool = False, force: bool = False) -> Dict[str, Any]:
+    """
+    Set the canvas layout mode between auto-layout and manual positioning.
+    
+    Args:
+        mode: Layout mode - "auto" or "manual"
+        apply_to_existing: Whether to apply mode change to existing containers
+        force: Skip confirmation prompts (use with caution)
+        
+    Returns:
+        Dict with operation result and detailed information
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[TOOL] set_layout_mode_tool called with mode={mode}, apply_to_existing={apply_to_existing}, force={force}")
+    
+    log_component_entry("TOOL", "set_layout_mode_tool", f"mode={mode}, apply_to_existing={apply_to_existing}")
+    
+    try:
+        # Validate mode parameter
+        if mode not in ["auto", "manual"]:
+            return {
+                "status": "error",
+                "message": f"Invalid layout mode: '{mode}'. Must be 'auto' or 'manual'.",
+                "error_code": "INVALID_MODE",
+                "valid_modes": ["auto", "manual"],
+                "provided_mode": mode,
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        # Get current layout state for context
+        current_layout_state = canvas_bridge.get_layout_state()
+        current_mode = current_layout_state["layout_mode"]
+        container_count = current_layout_state["container_count"]
+        
+        # Call canvas bridge to set layout mode
+        if debug_mode:
+            logger.debug(f"[TOOL] Calling canvas_bridge.set_layout_mode()")
+        
+        log_handover("TOOL", "CANVAS_BRIDGE", "set_layout_mode", f"mode={mode}")
+        
+        result = await canvas_bridge.set_layout_mode(
+            mode=mode,
+            user_confirmed=force,
+            apply_to_existing=apply_to_existing
+        )
+        
+        if debug_mode:
+            logger.debug(f"[TOOL] Canvas bridge returned: {result.get('status', 'unknown')}")
+        
+        # Handle confirmation required
+        if result.get("status") == "requires_confirmation":
+            confirmation_result = {
+                "status": "requires_confirmation",
+                "message": result["message"],
+                "action_required": result["action_required"],
+                "current_state": {
+                    "current_mode": current_mode,
+                    "requested_mode": mode,
+                    "container_count": container_count,
+                    "will_affect_existing": apply_to_existing
+                },
+                "pending_operation": result["pending_operation"],
+                "next_steps": [
+                    "Confirm the mode change to proceed",
+                    "Or call with force=True to skip confirmation"
+                ],
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            log_component_exit("TOOL", "set_layout_mode_tool", "CONFIRMATION_REQUIRED", f"Mode change requires confirmation")
+            return confirmation_result
+        
+        # Handle errors
+        if result.get("status") == "error":
+            return {
+                "status": "error",
+                "message": result.get("error", "Failed to set layout mode"),
+                "error_code": "MODE_CHANGE_FAILED",
+                "current_mode": current_mode,
+                "requested_mode": mode,
+                "suggestions": [
+                    "Check that the mode parameter is valid",
+                    "Ensure canvas is in a valid state",
+                    "Try again with different parameters"
+                ],
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        # Handle successful mode change
+        if result.get("status") == "success":
+            new_mode = result["mode"]
+            no_change = result.get("no_change", False)
+            
+            # Build response based on whether change occurred
+            if no_change:
+                final_result = {
+                    "status": "success",
+                    "message": f"Layout mode already set to '{new_mode}'",
+                    "operation": "set_layout_mode",
+                    "mode_info": {
+                        "current_mode": new_mode,
+                        "auto_layout_enabled": result.get("auto_layout_enabled", current_layout_state["auto_layout_enabled"]),
+                        "no_change_made": True
+                    },
+                    "container_context": {
+                        "total_containers": container_count,
+                        "containers_affected": 0
+                    },
+                    "timestamp": datetime.now().isoformat()
+                }
+            else:
+                # Calculate impact and provide detailed feedback
+                containers_affected = result.get("containers_to_reposition", 0) if apply_to_existing else 0
+                manual_container_count = result.get("manual_container_count", 0)
+                
+                # Generate mode-specific recommendations
+                if new_mode == "auto":
+                    recommendations = [
+                        "New containers will be automatically positioned",
+                        "Container layouts will be optimized for space efficiency",
+                        "Use create_container() without position parameters"
+                    ]
+                    if containers_affected > 0:
+                        recommendations.insert(0, f"All {containers_affected} existing containers will be repositioned")
+                else:  # manual mode
+                    recommendations = [
+                        "New containers will require explicit positioning (x, y, width, height)",
+                        "No automatic layout optimization will be applied", 
+                        "You have full control over container placement"
+                    ]
+                    if apply_to_existing:
+                        recommendations.insert(0, f"All {container_count} existing containers marked as manually positioned")
+                
+                final_result = {
+                    "status": "success",
+                    "message": result["message"],
+                    "operation": "set_layout_mode",
+                    "mode_change": {
+                        "from_mode": current_mode,
+                        "to_mode": new_mode,
+                        "auto_layout_enabled": result.get("auto_layout_enabled", False)
+                    },
+                    "container_impact": {
+                        "total_containers": container_count,
+                        "existing_containers_affected": result.get("existing_containers_affected", False),
+                        "containers_to_reposition": containers_affected,
+                        "manual_container_count": manual_container_count
+                    },
+                    "layout_context": {
+                        "new_container_behavior": "auto-positioned" if new_mode == "auto" else "requires explicit positioning",
+                        "existing_container_status": "repositioned" if apply_to_existing and containers_affected > 0 else "unchanged"
+                    },
+                    "recommendations": recommendations,
+                    "timestamp": datetime.now().isoformat()
+                }
+            
+            log_component_exit("TOOL", "set_layout_mode_tool", "SUCCESS", f"Mode set to {new_mode}")
+            return final_result
+        
+        # Unexpected response
+        return {
+            "status": "error",
+            "message": "Unexpected response from layout mode change",
+            "error_code": "UNEXPECTED_RESPONSE",
+            "bridge_result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        error_result = {
+            "status": "error",
+            "message": f"Unexpected error setting layout mode: {str(e)}",
+            "error_code": "UNEXPECTED_ERROR",
+            "provided_parameters": {
+                "mode": mode,
+                "apply_to_existing": apply_to_existing,
+                "force": force
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "set_layout_mode_tool", "ERROR", str(e))
+        return error_result
+
+
+async def get_layout_mode_tool() -> Dict[str, Any]:
+    """
+    Get current layout mode and container positioning information.
+    
+    Returns:
+        Dict with current layout state and detailed information
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[TOOL] get_layout_mode_tool called")
+    
+    log_component_entry("TOOL", "get_layout_mode_tool", "")
+    
+    try:
+        # Get layout state from canvas bridge
+        if debug_mode:
+            logger.debug(f"[TOOL] Getting layout state from canvas_bridge")
+        
+        log_handover("TOOL", "CANVAS_BRIDGE", "get_layout_state", "")
+        
+        layout_state = canvas_bridge.get_layout_state()
+        
+        if debug_mode:
+            logger.debug(f"[TOOL] Retrieved layout state successfully")
+        
+        # Get canvas dimensions for additional context
+        canvas_result = await get_canvas_dimensions_primitive()
+        if canvas_result["status"] == "success":
+            canvas_dims = canvas_result["dimensions"]
+            canvas_width = canvas_dims["width"]
+            canvas_height = canvas_dims["height"]
+            canvas_area = canvas_width * canvas_height
+        else:
+            canvas_width = canvas_height = canvas_area = 0
+        
+        # Analyze container distribution
+        container_count = layout_state["container_count"]
+        manual_count = len(layout_state["manual_containers"])
+        auto_count = container_count - manual_count
+        
+        # Calculate layout efficiency if containers exist
+        layout_analysis = {}
+        if container_count > 0:
+            manual_percentage = (manual_count / container_count) * 100
+            auto_percentage = (auto_count / container_count) * 100
+            
+            layout_analysis = {
+                "total_containers": container_count,
+                "auto_positioned_containers": auto_count,
+                "manually_positioned_containers": manual_count,
+                "auto_percentage": round(auto_percentage, 1),
+                "manual_percentage": round(manual_percentage, 1),
+                "mixed_layout": manual_count > 0 and auto_count > 0
+            }
+        
+        # Generate mode-specific insights
+        current_mode = layout_state["layout_mode"]
+        auto_enabled = layout_state["auto_layout_enabled"]
+        
+        if current_mode == "auto" and auto_enabled:
+            mode_insights = [
+                "Auto-layout is active - new containers will be automatically positioned",
+                "Container layouts are optimized for space efficiency",
+                "Position and size parameters are optional for new containers"
+            ]
+        elif current_mode == "manual":
+            mode_insights = [
+                "Manual positioning mode is active",
+                "All position and size parameters are required for new containers",
+                "No automatic layout optimization is applied"
+            ]
+        else:
+            mode_insights = [
+                "Layout mode state is inconsistent",
+                "Consider resetting layout mode for proper operation"
+            ]
+        
+        # Add container-specific insights
+        if container_count == 0:
+            mode_insights.append("Canvas is empty - ready for new content")
+        elif layout_analysis.get("mixed_layout", False):
+            mode_insights.append(f"Mixed layout detected: {auto_count} auto-positioned, {manual_count} manual")
+        
+        # Generate recommendations
+        recommendations = []
+        if current_mode == "auto" and container_count > 0:
+            recommendations.extend([
+                "Use create_container('id') for automatic positioning",
+                "Consider set_layout_mode('manual') for precise control"
+            ])
+        elif current_mode == "manual":
+            recommendations.extend([
+                "Use create_container('id', x, y, width, height) for manual positioning",
+                "Consider set_layout_mode('auto') for automatic optimization"
+            ])
+        
+        if container_count == 0:
+            recommendations.append("Start creating containers to build your layout")
+        elif container_count > 10:
+            recommendations.append("Consider using clear_canvas() if layout becomes too complex")
+        
+        final_result = {
+            "status": "success",
+            "message": f"Current layout mode: {current_mode}",
+            "operation": "get_layout_mode",
+            "layout_mode_info": {
+                "current_mode": current_mode,
+                "auto_layout_enabled": auto_enabled,
+                "layout_engine_version": layout_state["layout_engine_version"],
+                "last_auto_layout_time": layout_state["last_auto_layout_time"]
+            },
+            "container_analysis": layout_analysis if container_count > 0 else {
+                "total_containers": 0,
+                "message": "No containers on canvas"
+            },
+            "canvas_context": {
+                "canvas_size": {"width": canvas_width, "height": canvas_height},
+                "canvas_area": canvas_area,
+                "container_creation_order": layout_state["container_creation_order"]
+            },
+            "user_preferences": layout_state["preferences"],
+            "mode_insights": mode_insights,
+            "recommendations": recommendations,
+            "available_actions": [
+                "set_layout_mode() - Change layout mode",
+                "create_container() - Add new container",
+                "clear_canvas() - Start fresh"
+            ],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "get_layout_mode_tool", "SUCCESS", f"Retrieved layout mode: {current_mode}")
+        return final_result
+        
+    except Exception as e:
+        error_result = {
+            "status": "error",
+            "message": f"Unexpected error getting layout mode: {str(e)}",
+            "error_code": "UNEXPECTED_ERROR",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "get_layout_mode_tool", "ERROR", str(e))
+        return error_result
