@@ -12,7 +12,9 @@ from ..tools import (
     set_canvas_dimensions_tool,
     get_canvas_dimensions_tool,
     create_container_tool,
-    resize_container_tool
+    resize_container_tool,
+    move_container_tool,
+    delete_container_tool
 )
 from ..utilities import (
     log_component_entry,
@@ -116,6 +118,46 @@ def get_canvas_management_function_schemas() -> List[Dict[str, Any]]:
                     }
                 },
                 "required": ["container_id", "width", "height"]
+            }
+        },
+        {
+            "name": "move_container",
+            "description": "Move an existing container to a new position on the canvas",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "container_id": {
+                        "type": "string",
+                        "description": "Identifier of the container to move (must exist)",
+                        "minLength": 1
+                    },
+                    "x": {
+                        "type": "integer",
+                        "description": "New X coordinate position on canvas (must be non-negative)",
+                        "minimum": 0
+                    },
+                    "y": {
+                        "type": "integer",
+                        "description": "New Y coordinate position on canvas (must be non-negative)",
+                        "minimum": 0
+                    }
+                },
+                "required": ["container_id", "x", "y"]
+            }
+        },
+        {
+            "name": "delete_container",
+            "description": "Delete an existing container and remove it from the canvas",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "container_id": {
+                        "type": "string",
+                        "description": "Identifier of the container to delete (must exist)",
+                        "minLength": 1
+                    }
+                },
+                "required": ["container_id"]
             }
         }
     ]
@@ -278,12 +320,86 @@ async def execute_canvas_management_tool(function_name: str, arguments: Dict[str
             log_component_exit("REGISTRY", "execute_canvas_management_tool", result.get('status', 'unknown'))
             return result
             
+        elif function_name == "move_container":
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🎯 Executing move_container tool")
+            
+            container_id = arguments.get("container_id")
+            x = arguments.get("x")
+            y = arguments.get("y")
+            
+            # Check for missing required parameters
+            missing_params = []
+            if container_id is None:
+                missing_params.append("container_id")
+            if x is None:
+                missing_params.append("x")
+            if y is None:
+                missing_params.append("y")
+            
+            if missing_params:
+                if debug_mode:
+                    logger.debug(f"[REGISTRY] ❌ Missing parameters for move_container: {missing_params}")
+                return {
+                    "status": "error",
+                    "message": f"Missing required parameters: {', '.join(missing_params)}",
+                    "error_code": "MISSING_PARAMETERS",
+                    "required_parameters": ["container_id", "x", "y"],
+                    "missing_parameters": missing_params,
+                    "provided_arguments": arguments
+                }
+            
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🔄 Calling move_container_tool({container_id}, {x}, {y})")
+            
+            log_handover("REGISTRY", "TOOL", "move_container", f"container_id={container_id}, x={x}, y={y}")
+            
+            result = await move_container_tool(container_id, x, y)
+            
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🏁 Tool returned: {result.get('status', 'unknown')}")
+            
+            log_component_exit("REGISTRY", "execute_canvas_management_tool", result.get('status', 'unknown'))
+            return result
+            
+        elif function_name == "delete_container":
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🎯 Executing delete_container tool")
+            
+            container_id = arguments.get("container_id")
+            
+            # Check for missing required parameters
+            if container_id is None:
+                if debug_mode:
+                    logger.debug(f"[REGISTRY] ❌ Missing parameters for delete_container: container_id")
+                return {
+                    "status": "error",
+                    "message": "Missing required parameter: container_id",
+                    "error_code": "MISSING_PARAMETERS",
+                    "required_parameters": ["container_id"],
+                    "missing_parameters": ["container_id"],
+                    "provided_arguments": arguments
+                }
+            
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🔄 Calling delete_container_tool({container_id})")
+            
+            log_handover("REGISTRY", "TOOL", "delete_container", f"container_id={container_id}")
+            
+            result = await delete_container_tool(container_id)
+            
+            if debug_mode:
+                logger.debug(f"[REGISTRY] 🏁 Tool returned: {result.get('status', 'unknown')}")
+            
+            log_component_exit("REGISTRY", "execute_canvas_management_tool", result.get('status', 'unknown'))
+            return result
+            
         else:
             return {
                 "status": "error",
                 "message": f"Unknown canvas management function: {function_name}",
                 "error_code": "UNKNOWN_FUNCTION",
-                "available_functions": ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container"],
+                "available_functions": ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container", "move_container", "delete_container"],
                 "requested_function": function_name
             }
             
@@ -311,7 +427,9 @@ def get_tool_by_name(tool_name: str) -> callable:
         "set_canvas_dimensions": set_canvas_dimensions_tool,
         "get_canvas_dimensions": get_canvas_dimensions_tool,
         "create_container": create_container_tool,
-        "resize_container": resize_container_tool
+        "resize_container": resize_container_tool,
+        "move_container": move_container_tool,
+        "delete_container": delete_container_tool
     }
     return tools.get(tool_name)
 
@@ -354,6 +472,20 @@ def get_tool_metadata(tool_name: str) -> Dict[str, Any]:
             "category": "canvas_management",
             "parameters": ["container_id", "width", "height"],
             "returns": "Container resize result with size changes and positioning context"
+        },
+        "move_container": {
+            "name": "move_container",
+            "description": "Move an existing container with validation and intelligent feedback",
+            "category": "canvas_management",
+            "parameters": ["container_id", "x", "y"],
+            "returns": "Container move result with movement details and positioning context"
+        },
+        "delete_container": {
+            "name": "delete_container",
+            "description": "Delete an existing container with validation and intelligent feedback",
+            "category": "canvas_management",
+            "parameters": ["container_id"],
+            "returns": "Container deletion result with freed space information"
         }
     }
     return metadata.get(tool_name, {})
@@ -366,4 +498,4 @@ def list_available_tools() -> List[str]:
     Returns:
         List of tool names
     """
-    return ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container"] 
+    return ["set_canvas_dimensions", "get_canvas_dimensions", "create_container", "resize_container", "move_container", "delete_container"] 

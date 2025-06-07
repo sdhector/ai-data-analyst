@@ -543,4 +543,305 @@ async def resize_container_primitive(container_id: str, width: int, height: int)
         }
         
         log_component_exit("PRIMITIVE", "resize_container_primitive", "ERROR", str(e))
+        return error_result
+
+
+async def move_container_primitive(container_id: str, x: int, y: int) -> Dict[str, Any]:
+    """
+    Move an existing container to a new position directly.
+    
+    Args:
+        container_id: Identifier of the container to move
+        x: New X coordinate position on canvas
+        y: New Y coordinate position on canvas
+        
+    Returns:
+        Dict with operation result and details
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[PRIMITIVE] move_container_primitive STARTED with container_id={container_id}, x={x}, y={y}")
+    
+    log_component_entry("PRIMITIVE", "move_container_primitive", f"container_id={container_id}, x={x}, y={y}")
+    
+    try:
+        # Validate container exists
+        existing_containers = canvas_bridge.canvas_state.get("containers", {})
+        if container_id not in existing_containers:
+            error_result = {
+                "status": "error",
+                "operation": "move_container",
+                "error": f"Container ID '{container_id}' does not exist",
+                "error_code": "CONTAINER_NOT_FOUND",
+                "existing_container_ids": list(existing_containers.keys()),
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "move_container_primitive", "ERROR", f"Container not found: {container_id}")
+            return error_result
+        
+        # Validate coordinates
+        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+            error_result = {
+                "status": "error",
+                "operation": "move_container",
+                "error": "X and Y coordinates must be numeric",
+                "error_code": "INVALID_COORDINATES",
+                "provided_x": x,
+                "provided_y": y,
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "move_container_primitive", "ERROR", "Invalid coordinates")
+            return error_result
+        
+        # Convert to integers for consistency
+        x, y = int(x), int(y)
+        
+        # Get current container data
+        current_container = existing_containers[container_id]
+        old_x = current_container["x"]
+        old_y = current_container["y"]
+        width = current_container["width"]
+        height = current_container["height"]
+        
+        # Validate placement within canvas bounds
+        canvas_size = canvas_bridge.get_canvas_size()
+        canvas_width = canvas_size.get('width', 800)
+        canvas_height = canvas_size.get('height', 600)
+        
+        if x < 0 or y < 0 or x + width > canvas_width or y + height > canvas_height:
+            error_result = {
+                "status": "error",
+                "operation": "move_container",
+                "error": "Moved container bounding box extends outside canvas boundaries",
+                "error_code": "OUT_OF_BOUNDS",
+                "canvas_size": {"width": canvas_width, "height": canvas_height},
+                "container_size": {"width": width, "height": height},
+                "new_position": {"x": x, "y": y},
+                "new_bounds": {"x": x, "y": y, "width": width, "height": height},
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "move_container_primitive", "ERROR", "Out of bounds")
+            return error_result
+        
+        # Validate no overlap with other existing containers
+        existing_container_list = canvas_bridge.get_existing_containers()
+        overlapping_containers = []
+        
+        for existing in existing_container_list:
+            # Skip the container we're moving
+            if existing['id'] == container_id:
+                continue
+                
+            if canvas_bridge.check_overlap(x, y, width, height, 
+                                         existing['x'], existing['y'], 
+                                         existing['width'], existing['height']):
+                overlapping_containers.append(existing['id'])
+        
+        if overlapping_containers:
+            error_result = {
+                "status": "error",
+                "operation": "move_container",
+                "error": "Moved container would overlap with existing containers",
+                "error_code": "OVERLAP_DETECTED",
+                "overlapping_containers": overlapping_containers,
+                "new_position": {"x": x, "y": y},
+                "container_size": {"width": width, "height": height},
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "move_container_primitive", "ERROR", f"Overlaps with: {overlapping_containers}")
+            return error_result
+        
+        # Generate unique command ID for tracking
+        import uuid
+        command_id = f"cmd_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+        
+        # Update container position in canvas state
+        canvas_bridge.canvas_state["containers"][container_id].update({
+            "x": x,
+            "y": y,
+            "modified_at": datetime.now().isoformat()
+        })
+        canvas_bridge.canvas_state["last_updated"] = datetime.now().isoformat()
+        
+        # Broadcast container move command to frontend
+        move_message = {
+            "type": "canvas_command",
+            "command": "move_container",
+            "command_id": command_id,
+            "data": {
+                "container_id": container_id,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "old_x": old_x,
+                "old_y": old_y
+            }
+        }
+        
+        # Check if there are any WebSocket connections
+        connection_count = len(canvas_bridge.websocket_connections)
+        print(f"[PRIMITIVE] Broadcasting container move to {connection_count} WebSocket connection(s)")
+        
+        if connection_count == 0:
+            print("[WARNING] No WebSocket connections found - frontend may not be connected!")
+        
+        # Track the pending command
+        canvas_bridge.track_pending_command(command_id, "move_container", {
+            "container_id": container_id,
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+            "old_x": old_x,
+            "old_y": old_y
+        })
+        
+        await canvas_bridge.broadcast_to_frontend(move_message)
+        
+        print(f"[PRIMITIVE] Container '{container_id}' moved from ({old_x}, {old_y}) to ({x}, {y})")
+        
+        if debug_mode:
+            logger.debug(f"[PRIMITIVE] move_container_primitive COMPLETED successfully")
+        
+        result = {
+            "status": "success",
+            "operation": "move_container",
+            "container": {
+                "id": container_id,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height
+            },
+            "old_position": {"x": old_x, "y": old_y},
+            "new_position": {"x": x, "y": y},
+            "canvas_size": {"width": canvas_width, "height": canvas_height},
+            "total_containers": len(canvas_bridge.canvas_state["containers"]),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("PRIMITIVE", "move_container_primitive", "SUCCESS", f"Moved {container_id} to ({x},{y})")
+        return result
+        
+    except Exception as e:
+        print(f"[PRIMITIVE ERROR] Failed to move container: {e}")
+        
+        if debug_mode:
+            logger.debug(f"[PRIMITIVE] move_container_primitive FAILED: {e}")
+        
+        error_result = {
+            "status": "error",
+            "operation": "move_container",
+            "error": str(e),
+            "error_code": "UNEXPECTED_ERROR",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("PRIMITIVE", "move_container_primitive", "ERROR", str(e))
+        return error_result
+
+
+async def delete_container_primitive(container_id: str) -> Dict[str, Any]:
+    """
+    Delete an existing container directly.
+    
+    Args:
+        container_id: Identifier of the container to delete
+        
+    Returns:
+        Dict with operation result and details
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[PRIMITIVE] delete_container_primitive STARTED with container_id={container_id}")
+    
+    log_component_entry("PRIMITIVE", "delete_container_primitive", f"container_id={container_id}")
+    
+    try:
+        # Validate container exists
+        existing_containers = canvas_bridge.canvas_state.get("containers", {})
+        if container_id not in existing_containers:
+            error_result = {
+                "status": "error",
+                "operation": "delete_container",
+                "error": f"Container ID '{container_id}' does not exist",
+                "error_code": "CONTAINER_NOT_FOUND",
+                "existing_container_ids": list(existing_containers.keys()),
+                "timestamp": datetime.now().isoformat()
+            }
+            log_component_exit("PRIMITIVE", "delete_container_primitive", "ERROR", f"Container not found: {container_id}")
+            return error_result
+        
+        # Get container data before deletion for response
+        container_data = existing_containers[container_id].copy()
+        
+        # Generate unique command ID for tracking
+        import uuid
+        command_id = f"cmd_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+        
+        # Remove container from canvas state
+        del canvas_bridge.canvas_state["containers"][container_id]
+        canvas_bridge.canvas_state["last_updated"] = datetime.now().isoformat()
+        
+        # Broadcast container deletion command to frontend
+        delete_message = {
+            "type": "canvas_command",
+            "command": "delete_container",
+            "command_id": command_id,
+            "data": {
+                "container_id": container_id
+            }
+        }
+        
+        # Check if there are any WebSocket connections
+        connection_count = len(canvas_bridge.websocket_connections)
+        print(f"[PRIMITIVE] Broadcasting container deletion to {connection_count} WebSocket connection(s)")
+        
+        if connection_count == 0:
+            print("[WARNING] No WebSocket connections found - frontend may not be connected!")
+        
+        # Track the pending command
+        canvas_bridge.track_pending_command(command_id, "delete_container", {
+            "container_id": container_id,
+            "deleted_container": container_data
+        })
+        
+        await canvas_bridge.broadcast_to_frontend(delete_message)
+        
+        print(f"[PRIMITIVE] Container '{container_id}' deleted successfully")
+        
+        if debug_mode:
+            logger.debug(f"[PRIMITIVE] delete_container_primitive COMPLETED successfully")
+        
+        result = {
+            "status": "success",
+            "operation": "delete_container",
+            "deleted_container": container_data,
+            "remaining_containers": len(canvas_bridge.canvas_state["containers"]),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("PRIMITIVE", "delete_container_primitive", "SUCCESS", f"Deleted {container_id}")
+        return result
+        
+    except Exception as e:
+        print(f"[PRIMITIVE ERROR] Failed to delete container: {e}")
+        
+        if debug_mode:
+            logger.debug(f"[PRIMITIVE] delete_container_primitive FAILED: {e}")
+        
+        error_result = {
+            "status": "error",
+            "operation": "delete_container",
+            "error": str(e),
+            "error_code": "UNEXPECTED_ERROR",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("PRIMITIVE", "delete_container_primitive", "ERROR", str(e))
         return error_result 

@@ -15,7 +15,9 @@ from ..primitives import (
     set_canvas_dimensions_primitive,
     get_canvas_dimensions_primitive,
     create_container_primitive,
-    resize_container_primitive
+    resize_container_primitive,
+    move_container_primitive,
+    delete_container_primitive
 )
 from ..utilities import (
     log_component_entry,
@@ -629,4 +631,323 @@ async def resize_container_tool(container_id: str, width: int, height: int) -> D
         }
         
         log_component_exit("TOOL", "resize_container_tool", "ERROR", str(e))
+        return error_result
+
+
+async def move_container_tool(container_id: str, x: int, y: int) -> Dict[str, Any]:
+    """
+    Move an existing container to a new position with validation and intelligent feedback.
+    
+    Args:
+        container_id: Identifier of the container to move (must exist)
+        x: New X coordinate position on canvas (must be non-negative integer)
+        y: New Y coordinate position on canvas (must be non-negative integer)
+        
+    Returns:
+        Dict with operation result and detailed information
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[TOOL] move_container_tool called with container_id={container_id}, x={x}, y={y}")
+    
+    log_component_entry("TOOL", "move_container_tool", f"container_id={container_id}, x={x}, y={y}")
+    
+    try:
+        # Basic validation
+        if not isinstance(container_id, str) or not container_id.strip():
+            return {
+                "status": "error",
+                "message": "Container ID must be a non-empty string",
+                "error_code": "INVALID_CONTAINER_ID",
+                "provided_container_id": container_id,
+                "suggestions": [
+                    "Provide a valid container identifier",
+                    "Use get_canvas_state to see existing containers"
+                ]
+            }
+        
+        if not isinstance(x, int) or not isinstance(y, int):
+            return {
+                "status": "error",
+                "message": "X and Y coordinates must be integers",
+                "error_code": "INVALID_COORDINATES",
+                "provided_x": x,
+                "provided_y": y,
+                "suggestions": [
+                    "Provide X and Y as non-negative integers",
+                    "Example: move_container('my_container', 150, 100)"
+                ]
+            }
+        
+        if x < 0 or y < 0:
+            return {
+                "status": "error",
+                "message": "X and Y coordinates must be non-negative",
+                "error_code": "NEGATIVE_COORDINATES",
+                "provided_x": x,
+                "provided_y": y,
+                "suggestions": [
+                    "Use coordinates >= 0",
+                    "Top-left corner of canvas is (0, 0)"
+                ]
+            }
+        
+        # Get current canvas dimensions for context
+        canvas_result = await get_canvas_dimensions_primitive()
+        if canvas_result["status"] != "success":
+            return {
+                "status": "error",
+                "message": "Failed to get current canvas dimensions",
+                "error_code": "CANVAS_STATE_ERROR",
+                "details": canvas_result
+            }
+        
+        canvas_dims = canvas_result["dimensions"]
+        canvas_width = canvas_dims["width"]
+        canvas_height = canvas_dims["height"]
+        
+        # Execute the primitive operation
+        if debug_mode:
+            logger.debug(f"[TOOL] Calling primitive: move_container_primitive({container_id}, {x}, {y})")
+        
+        log_handover("TOOL", "PRIMITIVE", "move_container", f"container_id={container_id}, x={x}, y={y}")
+        
+        result = await move_container_primitive(container_id, x, y)
+        
+        if debug_mode:
+            logger.debug(f"[TOOL] Primitive returned: {result.get('status', 'unknown')}")
+        
+        if result["status"] != "success":
+            # Enhance error messages with helpful suggestions
+            error_code = result.get("error_code", "UNKNOWN_ERROR")
+            enhanced_suggestions = []
+            
+            if error_code == "CONTAINER_NOT_FOUND":
+                existing_ids = result.get("existing_container_ids", [])
+                enhanced_suggestions = [
+                    f"Container '{container_id}' does not exist",
+                    "Check the container ID spelling",
+                    f"Available containers: {', '.join(existing_ids) if existing_ids else 'None'}"
+                ]
+            elif error_code == "OUT_OF_BOUNDS":
+                container_size = result.get("container_size", {})
+                width, height = container_size.get("width", 0), container_size.get("height", 0)
+                max_x = canvas_width - width
+                max_y = canvas_height - height
+                enhanced_suggestions = [
+                    f"Container would extend outside canvas bounds ({canvas_width}x{canvas_height})",
+                    f"Container size: {width}x{height}",
+                    f"Maximum position for this container: ({max_x}, {max_y})",
+                    "Consider resizing the container or choosing a different position"
+                ]
+            elif error_code == "OVERLAP_DETECTED":
+                overlapping = result.get("overlapping_containers", [])
+                enhanced_suggestions = [
+                    f"Container would overlap with: {', '.join(overlapping)}",
+                    "Try a different position that doesn't overlap",
+                    "Consider moving other containers first",
+                    "Use get_canvas_state to see container positions"
+                ]
+            else:
+                enhanced_suggestions = [
+                    "Check container parameters and try again",
+                    "Ensure canvas is in a valid state"
+                ]
+            
+            return {
+                "status": "error",
+                "message": result.get("error", "Failed to move container"),
+                "error_code": error_code,
+                "primitive_result": result,
+                "suggestions": enhanced_suggestions
+            }
+        
+        # Calculate additional context for successful move
+        old_pos = result["old_position"]
+        new_pos = result["new_position"]
+        container_info = result["container"]
+        
+        distance_moved = ((new_pos["x"] - old_pos["x"])**2 + (new_pos["y"] - old_pos["y"])**2)**0.5
+        
+        final_result = {
+            "status": "success",
+            "message": f"Container '{container_id}' successfully moved from ({old_pos['x']}, {old_pos['y']}) to ({x}, {y})",
+            "operation": "move_container",
+            "container": container_info,
+            "movement": {
+                "old_position": old_pos,
+                "new_position": new_pos,
+                "distance_moved": round(distance_moved, 1),
+                "x_change": x - old_pos["x"],
+                "y_change": y - old_pos["y"]
+            },
+            "canvas_context": {
+                "canvas_size": {"width": canvas_width, "height": canvas_height},
+                "total_containers": result["total_containers"]
+            },
+            "positioning": {
+                "distance_from_edges": {
+                    "left": x,
+                    "top": y,
+                    "right": canvas_width - (x + container_info["width"]),
+                    "bottom": canvas_height - (y + container_info["height"])
+                }
+            },
+            "recommendations": [
+                f"Container moved {distance_moved:.1f} pixels",
+                f"Container is now at position ({x}, {y})",
+                "Container is ready for content updates or further modifications"
+            ],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "move_container_tool", "SUCCESS", f"Moved {container_id} to ({x},{y})")
+        return final_result
+        
+    except Exception as e:
+        error_result = {
+            "status": "error",
+            "message": f"Unexpected error moving container: {str(e)}",
+            "error_code": "UNEXPECTED_ERROR",
+            "provided_parameters": {
+                "container_id": container_id,
+                "x": x,
+                "y": y
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "move_container_tool", "ERROR", str(e))
+        return error_result
+
+
+async def delete_container_tool(container_id: str) -> Dict[str, Any]:
+    """
+    Delete an existing container with validation and intelligent feedback.
+    
+    Args:
+        container_id: Identifier of the container to delete (must exist)
+        
+    Returns:
+        Dict with operation result and detailed information
+    """
+    debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
+    logger = logging.getLogger(__name__)
+    
+    if debug_mode:
+        logger.debug(f"[TOOL] delete_container_tool called with container_id={container_id}")
+    
+    log_component_entry("TOOL", "delete_container_tool", f"container_id={container_id}")
+    
+    try:
+        # Basic validation
+        if not isinstance(container_id, str) or not container_id.strip():
+            return {
+                "status": "error",
+                "message": "Container ID must be a non-empty string",
+                "error_code": "INVALID_CONTAINER_ID",
+                "provided_container_id": container_id,
+                "suggestions": [
+                    "Provide a valid container identifier",
+                    "Use get_canvas_state to see existing containers"
+                ]
+            }
+        
+        # Get current canvas dimensions for context
+        canvas_result = await get_canvas_dimensions_primitive()
+        if canvas_result["status"] != "success":
+            return {
+                "status": "error",
+                "message": "Failed to get current canvas dimensions",
+                "error_code": "CANVAS_STATE_ERROR",
+                "details": canvas_result
+            }
+        
+        canvas_dims = canvas_result["dimensions"]
+        canvas_width = canvas_dims["width"]
+        canvas_height = canvas_dims["height"]
+        
+        # Execute the primitive operation
+        if debug_mode:
+            logger.debug(f"[TOOL] Calling primitive: delete_container_primitive({container_id})")
+        
+        log_handover("TOOL", "PRIMITIVE", "delete_container", f"container_id={container_id}")
+        
+        result = await delete_container_primitive(container_id)
+        
+        if debug_mode:
+            logger.debug(f"[TOOL] Primitive returned: {result.get('status', 'unknown')}")
+        
+        if result["status"] != "success":
+            # Enhance error messages with helpful suggestions
+            error_code = result.get("error_code", "UNKNOWN_ERROR")
+            enhanced_suggestions = []
+            
+            if error_code == "CONTAINER_NOT_FOUND":
+                existing_ids = result.get("existing_container_ids", [])
+                enhanced_suggestions = [
+                    f"Container '{container_id}' does not exist",
+                    "Check the container ID spelling",
+                    f"Available containers: {', '.join(existing_ids) if existing_ids else 'None'}"
+                ]
+            else:
+                enhanced_suggestions = [
+                    "Check container ID and try again",
+                    "Ensure canvas is in a valid state"
+                ]
+            
+            return {
+                "status": "error",
+                "message": result.get("error", "Failed to delete container"),
+                "error_code": error_code,
+                "primitive_result": result,
+                "suggestions": enhanced_suggestions
+            }
+        
+        # Calculate additional context for successful deletion
+        deleted_container = result["deleted_container"]
+        container_area = deleted_container["width"] * deleted_container["height"]
+        canvas_area = canvas_width * canvas_height
+        freed_area_percentage = (container_area / canvas_area) * 100 if canvas_area > 0 else 0
+        
+        final_result = {
+            "status": "success",
+            "message": f"Container '{container_id}' successfully deleted",
+            "operation": "delete_container",
+            "deleted_container": deleted_container,
+            "canvas_context": {
+                "canvas_size": {"width": canvas_width, "height": canvas_height},
+                "remaining_containers": result["remaining_containers"],
+                "freed_area_percentage": round(freed_area_percentage, 1)
+            },
+            "space_freed": {
+                "position": {"x": deleted_container["x"], "y": deleted_container["y"]},
+                "size": {"width": deleted_container["width"], "height": deleted_container["height"]},
+                "area": container_area
+            },
+            "recommendations": [
+                f"Freed {freed_area_percentage:.1f}% of canvas area",
+                f"Canvas now has {result['remaining_containers']} container(s)",
+                "Space is now available for new containers"
+            ],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "delete_container_tool", "SUCCESS", f"Deleted {container_id}")
+        return final_result
+        
+    except Exception as e:
+        error_result = {
+            "status": "error",
+            "message": f"Unexpected error deleting container: {str(e)}",
+            "error_code": "UNEXPECTED_ERROR",
+            "provided_parameters": {
+                "container_id": container_id
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log_component_exit("TOOL", "delete_container_tool", "ERROR", str(e))
         return error_result 

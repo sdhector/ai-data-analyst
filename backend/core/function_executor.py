@@ -41,7 +41,9 @@ class coreFunctionExecutor:
             "set_canvas_dimensions",
             "get_canvas_dimensions",
             "create_container",
-            "resize_container"
+            "resize_container",
+            "move_container",
+            "delete_container"
         ]
         
         if self.debug_mode:

@@ -9,12 +9,16 @@ from .canvas_management_tools import (
     set_canvas_dimensions_tool,
     get_canvas_dimensions_tool,
     create_container_tool,
-    resize_container_tool
+    resize_container_tool,
+    move_container_tool,
+    delete_container_tool
 )
 
 __all__ = [
     "set_canvas_dimensions_tool",
     "get_canvas_dimensions_tool",
     "create_container_tool",
-    "resize_container_tool"
+    "resize_container_tool",
+    "move_container_tool",
+    "delete_container_tool"
 ] 

@@ -9,7 +9,9 @@ from .canvas_operations import (
     set_canvas_dimensions_primitive,
     get_canvas_dimensions_primitive,
     create_container_primitive,
-    resize_container_primitive
+    resize_container_primitive,
+    move_container_primitive,
+    delete_container_primitive
 )
 
 __all__ = [
@@ -17,5 +19,7 @@ __all__ = [
     "set_canvas_dimensions_primitive",
     "get_canvas_dimensions_primitive",
     "create_container_primitive",
-    "resize_container_primitive"
+    "resize_container_primitive",
+    "move_container_primitive",
+    "delete_container_primitive"
 ] 
