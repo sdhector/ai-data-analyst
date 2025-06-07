@@ -85,7 +85,7 @@ class UserFeedbackManager:
         request_id: Optional[str] = None
     ):
         """Notify user that a tool execution has started"""
-        message = f"⚙️ Starting {tool_name}"
+        message = f"Starting {tool_name}"
         details = {
             "tool_name": tool_name,
             "parameters": parameters,
@@ -112,7 +112,7 @@ class UserFeedbackManager:
         request_id: Optional[str] = None
     ):
         """Notify user that a tool execution completed successfully"""
-        message = f"✅ {tool_name} completed successfully"
+        message = f"{tool_name} completed successfully"
         details = {
             "tool_name": tool_name,
             "result": result,
@@ -139,7 +139,7 @@ class UserFeedbackManager:
         request_id: Optional[str] = None
     ):
         """Notify user that a tool execution failed"""
-        message = f"❌ {tool_name} failed: {error}"
+        message = f"{tool_name} failed: {error}"
         details = {
             "tool_name": tool_name,
             "error": error,
@@ -167,7 +167,7 @@ class UserFeedbackManager:
         request_id: Optional[str] = None
     ):
         """Notify user of tool execution progress"""
-        message = f"🔄 {tool_name}: {progress_message}"
+        message = f"{tool_name}: {progress_message}"
         details = {
             "tool_name": tool_name,
             "progress_message": progress_message,
