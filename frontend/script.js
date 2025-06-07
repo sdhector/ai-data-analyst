@@ -296,6 +296,14 @@ function executeCanvasCommand(command, data, commandId = null) {
             // TODO: Add acknowledgment for container modification
             break;
             
+        case 'move_container':
+            moveContainer(data.container_id, data.x, data.y, commandId);
+            break;
+            
+        case 'resize_container':
+            resizeContainer(data.container_id, data.width, data.height, commandId);
+            break;
+            
         case 'clear_canvas':
             clearCanvas();
             // TODO: Add acknowledgment for canvas clearing
@@ -763,6 +771,242 @@ function modifyContainer(id, x, y, width, height) {
     updateStateDisplay();
     console.log(`Container ${id} modified to (${x}, ${y}) with size ${width}x${height}`);
     return true;
+}
+
+/**
+ * Move a container to a new position
+ */
+function moveContainer(id, x, y, commandId = null) {
+    const container = window.canvasState.containers.get(id);
+    if (!container) {
+        console.warn(`Container ${id} not found`);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'move_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: `Container ${id} not found`,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Container ${id} not found`
+            });
+        }
+        return false;
+    }
+    
+    // Validate bounds using current canvas size and existing container size
+    const canvasWidth = window.canvasState.canvasSize.width;
+    const canvasHeight = window.canvasState.canvasSize.height;
+    const width = container.width;
+    const height = container.height;
+    
+    if (x < 0 || y < 0 || x + width > canvasWidth || y + height > canvasHeight) {
+        console.warn(`Container bounds exceed canvas size (${canvasWidth}x${canvasHeight})`);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'move_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: `Container bounds exceed canvas size (${canvasWidth}x${canvasHeight})`,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Container bounds exceed canvas size`
+            });
+        }
+        return false;
+    }
+    
+    try {
+        // Store old position for acknowledgment
+        const oldX = container.x;
+        const oldY = container.y;
+        
+        // Update container position
+        container.element.style.left = x + 'px';
+        container.element.style.top = y + 'px';
+        
+        // Update stored data
+        container.x = x;
+        container.y = y;
+        
+        updateStateDisplay();
+        console.log(`✅ Container ${id} moved from (${oldX}, ${oldY}) to (${x}, ${y})`);
+        
+        // Send success acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'move_container',
+                status: 'success',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    old_x: oldX,
+                    old_y: oldY,
+                    new_x: x,
+                    new_y: y,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Container ${id} successfully moved to (${x}, ${y})`
+            });
+        }
+        
+        return true;
+    } catch (error) {
+        console.error(`❌ Failed to move container ${id}:`, error);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'move_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Failed to move container: ${error.message}`
+            });
+        }
+        return false;
+    }
+}
+
+/**
+ * Resize a container
+ */
+function resizeContainer(id, width, height, commandId = null) {
+    const container = window.canvasState.containers.get(id);
+    if (!container) {
+        console.warn(`Container ${id} not found`);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'resize_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: `Container ${id} not found`,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Container ${id} not found`
+            });
+        }
+        return false;
+    }
+    
+    // Validate bounds using current canvas size and container position
+    const canvasWidth = window.canvasState.canvasSize.width;
+    const canvasHeight = window.canvasState.canvasSize.height;
+    const x = container.x;
+    const y = container.y;
+    
+    if (width <= 0 || height <= 0) {
+        console.warn(`Invalid container dimensions: ${width}x${height}`);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'resize_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: `Invalid container dimensions: ${width}x${height}`,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Invalid container dimensions`
+            });
+        }
+        return false;
+    }
+    
+    if (x + width > canvasWidth || y + height > canvasHeight) {
+        console.warn(`Container bounds exceed canvas size (${canvasWidth}x${canvasHeight})`);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'resize_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: `Container bounds exceed canvas size (${canvasWidth}x${canvasHeight})`,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Container bounds exceed canvas size`
+            });
+        }
+        return false;
+    }
+    
+    try {
+        // Store old dimensions for acknowledgment
+        const oldWidth = container.width;
+        const oldHeight = container.height;
+        
+        // Update container size
+        container.element.style.width = width + 'px';
+        container.element.style.height = height + 'px';
+        
+        // Update stored data
+        container.width = width;
+        container.height = height;
+        
+        updateStateDisplay();
+        console.log(`✅ Container ${id} resized from ${oldWidth}x${oldHeight} to ${width}x${height}`);
+        
+        // Send success acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'resize_container',
+                status: 'success',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    old_width: oldWidth,
+                    old_height: oldHeight,
+                    new_width: width,
+                    new_height: height,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Container ${id} successfully resized to ${width}x${height}`
+            });
+        }
+        
+        return true;
+    } catch (error) {
+        console.error(`❌ Failed to resize container ${id}:`, error);
+        // Send error acknowledgment
+        if (isConnected) {
+            sendWebSocketMessage({
+                type: 'canvas_command_ack',
+                command: 'resize_container',
+                status: 'error',
+                data: {
+                    command_id: commandId,
+                    container_id: id,
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                },
+                message: `Failed to resize container: ${error.message}`
+            });
+        }
+        return false;
+    }
 }
 
 /**
