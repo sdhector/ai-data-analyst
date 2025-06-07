@@ -65,13 +65,13 @@ def get_canvas_management_function_schemas() -> List[Dict[str, Any]]:
         },
         {
             "name": "create_container",
-            "description": "🚀 Create containers with AUTOMATIC positioning and sizing! The system is in AUTO-LAYOUT MODE by default. For user requests like 'create two containers' or 'add a YoY sales chart and customer retention dashboard', make MULTIPLE calls to this function with meaningful IDs: create_container('yoy_sales_chart'), create_container('customer_retention_dashboard'). You should generate descriptive, meaningful container IDs based on the user's intent. Position and size are calculated automatically.",
+            "description": "🚀 Create containers with AUTOMATIC positioning and sizing! ⚠️ IMPORTANT: YOU must generate meaningful container IDs - NEVER ask the user for IDs! For 'create three containers' → use 'container_1', 'container_2', 'container_3'. For 'add a YoY sales chart and customer retention dashboard' → use 'yoy_sales_chart', 'customer_retention_dashboard'. For 'create some widgets' → use 'widget_1', 'widget_2', etc. Generate IDs based on user context, then make MULTIPLE calls to this function. Position and size are calculated automatically.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "container_id": {
                         "type": "string",
-                        "description": "Unique identifier for the container (must be non-empty string)",
+                        "description": "🎯 YOU MUST GENERATE this ID based on user context! Examples: 'sales_dashboard', 'chart_panel_1', 'revenue_widget'. NEVER ask user for this - create meaningful names automatically!",
                         "minLength": 1
                     },
                     "x": {
